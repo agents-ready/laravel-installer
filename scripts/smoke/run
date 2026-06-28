@@ -1,0 +1,766 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+package_root_default="$(cd "$script_dir/../.." && pwd -P)"
+
+PACKAGE_ROOT="${AGENT_READY_SMOKE_PACKAGE_ROOT:-$package_root_default}"
+SMOKE_ROOT="${AGENT_READY_SMOKE_ROOT:-/tmp/opencode/agent-ready-installer-smoke}"
+PROFILE="${AGENT_READY_SMOKE_PROFILE:-full}"
+RUNTIME="${AGENT_READY_SMOKE_RUNTIME:-frankenphp}"
+DATABASE="${AGENT_READY_SMOKE_DATABASE:-pgsql}"
+HORIZON="${AGENT_READY_SMOKE_HORIZON:-0}"
+KEEP="${AGENT_READY_SMOKE_KEEP:-failure}"
+TOOL_MODE="${AGENT_READY_SMOKE_TOOL_MODE:-docker}"
+RUN_ID="${AGENT_READY_SMOKE_RUN_ID:-}"
+LARAVEL_VERSION="${AGENT_READY_SMOKE_LARAVEL_VERSION:-^13.0}"
+PHP_VERSION="${AGENT_READY_SMOKE_PHP_VERSION:-8.4}"
+COMPOSER_VERSION="${AGENT_READY_SMOKE_COMPOSER_VERSION:-2.9.2}"
+PACKAGE_CONSTRAINT="${AGENT_READY_SMOKE_PACKAGE_CONSTRAINT:-@dev}"
+HTTP_RETRIES="${AGENT_READY_SMOKE_HTTP_RETRIES:-30}"
+HTTP_RETRY_DELAY="${AGENT_READY_SMOKE_HTTP_RETRY_DELAY:-2}"
+
+TRAEFIK_HOME="${AGENT_READY_SMOKE_TRAEFIK_HOME:-}"
+SERVICES_HOME="${AGENT_READY_SMOKE_SERVICES_HOME:-}"
+
+usage() {
+  cat >&2 <<'USAGE'
+Usage: scripts/smoke/run [options]
+
+Options:
+  --profile install|runtime|http|worktree|full
+  --runtime frankenphp|nginx-php-fpm
+  --database pgsql|mysql
+  --horizon
+  --root <path>
+  --keep never|failure|always
+  --tool-mode docker|host
+  --run-id <slug>
+  --traefik-home <path>
+  --services-home <path>
+
+Environment mirrors the AGENT_READY_SMOKE_* variables documented in docs/plans/long-term-smoke-strategy.md.
+USAGE
+}
+
+fail() {
+  printf 'smoke: %s\n' "$*" >&2
+  exit 1
+}
+
+slugify() {
+  local value="$1"
+
+  value="$(printf '%s' "$value" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//; s/-+/-/g')"
+  [[ -n "$value" ]] || value="smoke"
+  printf '%s\n' "$value"
+}
+
+json_escape() {
+  local value="$1"
+  value="${value//\\/\\\\}"
+  value="${value//\"/\\\"}"
+  value="${value//$'\n'/\\n}"
+  value="${value//$'\r'/\\r}"
+  value="${value//$'\t'/\\t}"
+  printf '%s' "$value"
+}
+
+bool_value() {
+  case "$1" in
+    1|true|TRUE|yes|YES|on|ON) printf 'true\n' ;;
+    0|false|FALSE|no|NO|off|OFF|'') printf 'false\n' ;;
+    *) fail "Invalid boolean value for horizon: $1" ;;
+  esac
+}
+
+while (($#)); do
+  case "$1" in
+    --profile|--runtime|--database|--root|--keep|--tool-mode|--run-id|--traefik-home|--services-home)
+      (($# >= 2)) || fail "Missing value for $1."
+      case "$1" in
+        --profile) PROFILE="$2" ;;
+        --runtime) RUNTIME="$2" ;;
+        --database) DATABASE="$2" ;;
+        --root) SMOKE_ROOT="$2" ;;
+        --keep) KEEP="$2" ;;
+        --tool-mode) TOOL_MODE="$2" ;;
+        --run-id) RUN_ID="$2" ;;
+        --traefik-home) TRAEFIK_HOME="$2" ;;
+        --services-home) SERVICES_HOME="$2" ;;
+      esac
+      shift 2
+      ;;
+    --profile=*) PROFILE="${1#--profile=}"; shift ;;
+    --runtime=*) RUNTIME="${1#--runtime=}"; shift ;;
+    --database=*) DATABASE="${1#--database=}"; shift ;;
+    --root=*) SMOKE_ROOT="${1#--root=}"; shift ;;
+    --keep=*) KEEP="${1#--keep=}"; shift ;;
+    --tool-mode=*) TOOL_MODE="${1#--tool-mode=}"; shift ;;
+    --run-id=*) RUN_ID="${1#--run-id=}"; shift ;;
+    --traefik-home=*) TRAEFIK_HOME="${1#--traefik-home=}"; shift ;;
+    --services-home=*) SERVICES_HOME="${1#--services-home=}"; shift ;;
+    --horizon) HORIZON=1; shift ;;
+    -h|--help) usage; exit 0 ;;
+    *) fail "Unknown option: $1" ;;
+  esac
+done
+
+case "$PROFILE" in
+  install|runtime|http|worktree|full) ;;
+  *) fail "--profile must be one of: install, runtime, http, worktree, full." ;;
+esac
+
+case "$RUNTIME" in
+  frankenphp|nginx-php-fpm) ;;
+  *) fail "--runtime must be one of: frankenphp, nginx-php-fpm." ;;
+esac
+
+case "$DATABASE" in
+  pgsql|mysql) ;;
+  *) fail "--database must be one of: pgsql, mysql." ;;
+esac
+
+case "$KEEP" in
+  never|failure|always) ;;
+  *) fail "--keep must be one of: never, failure, always." ;;
+esac
+
+case "$TOOL_MODE" in
+  docker|host) ;;
+  *) fail "--tool-mode must be one of: docker, host." ;;
+esac
+
+HORIZON_BOOL="$(bool_value "$HORIZON")"
+
+if [[ -z "$RUN_ID" ]]; then
+  RUN_ID="$(date -u +'%Y%m%dt%H%M%sz')-${RANDOM}${RANDOM}"
+fi
+
+RUN_ID="$(slugify "$RUN_ID")"
+RUN_ID="${RUN_ID:0:40}"
+RUN_ID_SHORT="${RUN_ID##*-}"
+RUN_ID_SHORT="${RUN_ID_SHORT:0:12}"
+[[ -n "$RUN_ID_SHORT" ]] || RUN_ID_SHORT="${RUN_ID:0:12}"
+
+SMOKE_ROOT="$(mkdir -p "$SMOKE_ROOT" && cd "$SMOKE_ROOT" && pwd -P)"
+PACKAGE_ROOT="$(cd "$PACKAGE_ROOT" && pwd -P)"
+
+default_companion_home() {
+  local explicit_path="$1"
+  local sibling_name="$2"
+  local sibling_path
+
+  sibling_path="$(dirname "$PACKAGE_ROOT")/$sibling_name"
+  if [[ -d "$explicit_path" ]]; then
+    printf '%s\n' "$explicit_path"
+  elif [[ -d "$sibling_path" ]]; then
+    printf '%s\n' "$sibling_path"
+  else
+    printf '%s\n' "$explicit_path"
+  fi
+}
+
+if [[ -z "$TRAEFIK_HOME" ]]; then
+  TRAEFIK_HOME="$(default_companion_home /home/edgar/projects/shared-traefik shared-traefik)"
+fi
+
+if [[ -z "$SERVICES_HOME" ]]; then
+  SERVICES_HOME="$(default_companion_home /home/edgar/projects/shared-services shared-services)"
+fi
+
+TRAEFIK_HOME="$(cd "$TRAEFIK_HOME" 2>/dev/null && pwd -P || printf '%s' "$TRAEFIK_HOME")"
+SERVICES_HOME="$(cd "$SERVICES_HOME" 2>/dev/null && pwd -P || printf '%s' "$SERVICES_HOME")"
+
+APP_SLUG="$(slugify "laravel-$RUN_ID")"
+APP_SLUG="${APP_SLUG:0:48}"
+ROUTE_DOMAIN="$APP_SLUG.localhost"
+WORKTREE_ID="wt-$RUN_ID_SHORT"
+WORKTREE_ID="${WORKTREE_ID:0:48}"
+WORKTREE_BRANCH="smoke/$RUN_ID"
+RUN_ROOT="$SMOKE_ROOT/$RUN_ID"
+APP_DIR="$RUN_ROOT/$APP_SLUG"
+WORKTREE_DIR="$RUN_ROOT/worktrees/$WORKTREE_ID"
+ARTIFACTS="${AGENT_READY_SMOKE_ARTIFACTS:-$RUN_ROOT/artifacts}"
+COMMAND_LOG_DIR="$ARTIFACTS/commands"
+COMPOSER_CACHE_DIR="${AGENT_READY_SMOKE_COMPOSER_CACHE:-$SMOKE_ROOT/.cache/composer}"
+RUNNER_IMAGE="agent-ready-installer-smoke-runner:${PHP_VERSION}-${COMPOSER_VERSION}"
+PACKAGE_NAME="agents-ready/laravel-installer"
+STEP=0
+APP_CREATED=false
+MAIN_RUNTIME_STARTED=false
+WORKTREE_CREATED=false
+WORKTREE_RUNTIME_STARTED=false
+WORKTREE_REMOVED=false
+
+profile_has_runtime() {
+  case "$PROFILE" in
+    runtime|http|worktree|full) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+profile_has_http() {
+  case "$PROFILE" in
+    runtime|http|worktree|full) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+profile_has_worktree() {
+  case "$PROFILE" in
+    worktree|full) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+require_command() {
+  command -v "$1" >/dev/null 2>&1 || fail "Required command not found: $1"
+}
+
+require_executable() {
+  [[ -x "$1" ]] || fail "Required executable not found: $1"
+}
+
+preflight_companions() {
+  require_executable "$TRAEFIK_HOME/bin/ensure"
+  require_executable "$TRAEFIK_HOME/bin/status"
+  require_executable "$SERVICES_HOME/bin/ensure"
+  require_executable "$SERVICES_HOME/bin/status"
+  require_executable "$SERVICES_HOME/bin/derive-checkout"
+  require_executable "$SERVICES_HOME/bin/provision-checkout"
+  require_executable "$SERVICES_HOME/bin/drop-checkout"
+  require_executable "$SERVICES_HOME/bin/clean-prefix"
+}
+
+preflight_package_root() {
+  [[ -f "$PACKAGE_ROOT/composer.json" ]] || fail "Package root does not contain composer.json: $PACKAGE_ROOT"
+  [[ -f "$PACKAGE_ROOT/src/Console/InstallCommand.php" ]] || fail "Package root does not look like agent-ready-installer: $PACKAGE_ROOT"
+  [[ -f "$PACKAGE_ROOT/docker/smoke-runner/Dockerfile" ]] || fail "Smoke runner Dockerfile is missing."
+}
+
+build_runner_if_needed() {
+  if [[ "$TOOL_MODE" == "host" ]]; then
+    require_command php
+    require_command composer
+    return 0
+  fi
+
+  mkdir -p "$COMPOSER_CACHE_DIR"
+  docker build \
+    --build-arg "PHP_VERSION=$PHP_VERSION" \
+    --build-arg "COMPOSER_VERSION=$COMPOSER_VERSION" \
+    -t "$RUNNER_IMAGE" \
+    "$PACKAGE_ROOT/docker/smoke-runner"
+}
+
+preflight() {
+  require_command docker
+  require_command git
+  require_command curl
+  docker info >/dev/null
+  docker compose version >/dev/null
+  preflight_package_root
+  preflight_companions
+  build_runner_if_needed
+}
+
+host_path_to_runner_path() {
+  local path="$1"
+
+  case "$path" in
+    "$RUN_ROOT") printf '/workspace\n' ;;
+    "$RUN_ROOT"/*) printf '/workspace/%s\n' "${path#"$RUN_ROOT"/}" ;;
+    "$PACKAGE_ROOT") printf '/agent-ready-installer\n' ;;
+    *) fail "Cannot map host path into smoke runner: $path" ;;
+  esac
+}
+
+runner_exec() {
+  local host_workdir="$1"
+  shift
+  local container_workdir
+
+  container_workdir="$(host_path_to_runner_path "$host_workdir")"
+  mkdir -p "$COMPOSER_CACHE_DIR"
+  docker run --rm \
+    --user "$(id -u):$(id -g)" \
+    -e COMPOSER_ALLOW_SUPERUSER=1 \
+    -e COMPOSER_HOME=/tmp/composer-home \
+    -e COMPOSER_CACHE_DIR=/tmp/composer-cache \
+    -v "$RUN_ROOT:/workspace" \
+    -v "$PACKAGE_ROOT:/agent-ready-installer:ro" \
+    -v "$COMPOSER_CACHE_DIR:/tmp/composer-cache" \
+    -w "$container_workdir" \
+    "$RUNNER_IMAGE" \
+    "$@"
+}
+
+tool_exec() {
+  local host_workdir="$1"
+  shift
+
+  if [[ "$TOOL_MODE" == "host" ]]; then
+    (cd "$host_workdir" && "$@")
+  else
+    runner_exec "$host_workdir" "$@"
+  fi
+}
+
+composer_exec() {
+  local host_workdir="$1"
+  shift
+  tool_exec "$host_workdir" composer "$@"
+}
+
+php_exec() {
+  local host_workdir="$1"
+  shift
+  tool_exec "$host_workdir" php "$@"
+}
+
+run_in() {
+  local dir="$1"
+  shift
+  (cd "$dir" && "$@")
+}
+
+run_step() {
+  local name="$1"
+  shift
+  local log_file
+  local status
+
+  STEP=$((STEP + 1))
+  log_file="$COMMAND_LOG_DIR/$(printf '%03d' "$STEP")-$name.log"
+  mkdir -p "$COMMAND_LOG_DIR"
+
+  printf '\n==> %s\n' "$name"
+  printf '$' > "$log_file"
+  printf ' %q' "$@" >> "$log_file"
+  printf '\n\n' >> "$log_file"
+
+  set +e
+  "$@" >> "$log_file" 2>&1
+  status=$?
+  set -e
+
+  if [[ $status -ne 0 ]]; then
+    printf 'Smoke step failed: %s\n' "$name" >&2
+    printf 'Command log: %s\n' "$log_file" >&2
+    tail -n 80 "$log_file" >&2 || true
+    return "$status"
+  fi
+}
+
+write_cleanup_state() {
+  mkdir -p "$RUN_ROOT"
+  cat > "$RUN_ROOT/cleanup.json" <<JSON
+{
+  "version": 1,
+  "runId": "$(json_escape "$RUN_ID")",
+  "runRoot": "$(json_escape "$RUN_ROOT")",
+  "smokeRoot": "$(json_escape "$SMOKE_ROOT")",
+  "artifactsDir": "$(json_escape "$ARTIFACTS")",
+  "packageRoot": "$(json_escape "$PACKAGE_ROOT")",
+  "appDir": "$(json_escape "$APP_DIR")",
+  "appSlug": "$(json_escape "$APP_SLUG")",
+  "appProjectId": "$(json_escape "$APP_SLUG")",
+  "appComposeProject": "$(json_escape "${APP_SLUG//-/_}")",
+  "routeDomain": "$(json_escape "$ROUTE_DOMAIN")",
+  "worktreeDir": "$(json_escape "$WORKTREE_DIR")",
+  "worktreeId": "$(json_escape "$WORKTREE_ID")",
+  "worktreeBranch": "$(json_escape "$WORKTREE_BRANCH")",
+  "worktreeComposeProject": "$(json_escape "${APP_SLUG//-/_}_${WORKTREE_ID//-/_}")",
+  "runtime": "$(json_escape "$RUNTIME")",
+  "database": "$(json_escape "$DATABASE")",
+  "horizon": $HORIZON_BOOL,
+  "appCreated": $APP_CREATED,
+  "mainRuntimeStarted": $MAIN_RUNTIME_STARTED,
+  "worktreeCreated": $WORKTREE_CREATED,
+  "worktreeRuntimeStarted": $WORKTREE_RUNTIME_STARTED,
+  "worktreeRemoved": $WORKTREE_REMOVED,
+  "traefikHome": "$(json_escape "$TRAEFIK_HOME")",
+  "servicesHome": "$(json_escape "$SERVICES_HOME")",
+  "toolMode": "$(json_escape "$TOOL_MODE")",
+  "runnerImage": "$(json_escape "$RUNNER_IMAGE")"
+}
+JSON
+}
+
+copy_if_exists() {
+  local source="$1"
+  local target="$2"
+
+  [[ -e "$source" ]] || return 0
+  mkdir -p "$(dirname "$target")"
+  cp -a "$source" "$target"
+}
+
+redact_env_file() {
+  local source="$1"
+  local target="$2"
+
+  [[ -f "$source" ]] || return 0
+  mkdir -p "$(dirname "$target")"
+  sed -E '/(KEY|SECRET|TOKEN|PASSWORD|PASS|AUTH|COOKIE|SALT)=/I s/=.*/=<redacted>/' "$source" > "$target"
+}
+
+collect_artifacts() {
+  mkdir -p "$ARTIFACTS/app" "$ARTIFACTS/worktree" "$ARTIFACTS/docker" "$ARTIFACTS/http" "$ARTIFACTS/traefik" "$ARTIFACTS/shared-services"
+
+  cat > "$ARTIFACTS/metadata.json" <<JSON
+{
+  "runId": "$(json_escape "$RUN_ID")",
+  "profile": "$(json_escape "$PROFILE")",
+  "runtime": "$(json_escape "$RUNTIME")",
+  "database": "$(json_escape "$DATABASE")",
+  "horizon": $HORIZON_BOOL,
+  "runRoot": "$(json_escape "$RUN_ROOT")",
+  "appDir": "$(json_escape "$APP_DIR")",
+  "worktreeDir": "$(json_escape "$WORKTREE_DIR")",
+  "routeDomain": "$(json_escape "$ROUTE_DOMAIN")"
+}
+JSON
+
+  copy_if_exists "$RUN_ROOT/cleanup.json" "$ARTIFACTS/cleanup.json"
+  copy_if_exists "$APP_DIR/composer.json" "$ARTIFACTS/app/composer.json"
+  copy_if_exists "$APP_DIR/composer.lock" "$ARTIFACTS/app/composer.lock"
+  copy_if_exists "$APP_DIR/docker-compose.yml" "$ARTIFACTS/app/docker-compose.yml"
+  copy_if_exists "$APP_DIR/.agent-ready/worktree.json" "$ARTIFACTS/app/worktree.json"
+  copy_if_exists "$APP_DIR/.agent-ready/worktrees.json" "$ARTIFACTS/app/worktrees.json"
+  copy_if_exists "$APP_DIR/.agent-ready/config.json" "$ARTIFACTS/app/config.json"
+  copy_if_exists "$APP_DIR/storage/logs/laravel.log" "$ARTIFACTS/app/storage-logs-laravel.log"
+  redact_env_file "$APP_DIR/.env" "$ARTIFACTS/app/env.redacted"
+  redact_env_file "$APP_DIR/.env.testing" "$ARTIFACTS/app/env-testing.redacted"
+
+  if [[ -d "$APP_DIR/.git" ]]; then
+    git -C "$APP_DIR" status --short --untracked-files=all > "$ARTIFACTS/app/git-status.txt" 2>&1 || true
+    git -C "$APP_DIR" worktree list --porcelain > "$ARTIFACTS/app/git-worktree-list.txt" 2>&1 || true
+  fi
+
+  copy_if_exists "$WORKTREE_DIR/.agent-ready/worktree.json" "$ARTIFACTS/worktree/worktree.json"
+  copy_if_exists "$WORKTREE_DIR/storage/logs/laravel.log" "$ARTIFACTS/worktree/storage-logs-laravel.log"
+  redact_env_file "$WORKTREE_DIR/.env" "$ARTIFACTS/worktree/env.redacted"
+  redact_env_file "$WORKTREE_DIR/.env.testing" "$ARTIFACTS/worktree/env-testing.redacted"
+
+  if [[ -d "$WORKTREE_DIR/.git" ]]; then
+    git -C "$WORKTREE_DIR" status --short --untracked-files=all > "$ARTIFACTS/worktree/git-status.txt" 2>&1 || true
+  fi
+
+  docker version > "$ARTIFACTS/docker/docker-version.txt" 2>&1 || true
+  docker info > "$ARTIFACTS/docker/docker-info.txt" 2>&1 || true
+  if [[ -f "$APP_DIR/docker-compose.yml" ]]; then
+    (cd "$APP_DIR" && docker compose --file docker-compose.yml ps --all) > "$ARTIFACTS/docker/app-ps.txt" 2>&1 || true
+    (cd "$APP_DIR" && docker compose --file docker-compose.yml logs --no-color --timestamps) > "$ARTIFACTS/docker/app-logs.txt" 2>&1 || true
+  fi
+  if [[ -f "$WORKTREE_DIR/docker-compose.yml" ]]; then
+    (cd "$WORKTREE_DIR" && docker compose --file docker-compose.yml ps --all) > "$ARTIFACTS/docker/worktree-ps.txt" 2>&1 || true
+    (cd "$WORKTREE_DIR" && docker compose --file docker-compose.yml logs --no-color --timestamps) > "$ARTIFACTS/docker/worktree-logs.txt" 2>&1 || true
+  fi
+  "$TRAEFIK_HOME/bin/status" > "$ARTIFACTS/traefik/status.txt" 2>&1 || true
+  "$SERVICES_HOME/bin/status" > "$ARTIFACTS/shared-services/status.txt" 2>&1 || true
+}
+
+on_exit() {
+  local status=$?
+  local cleanup_status=0
+
+  trap - EXIT
+  set +e
+
+  if [[ $status -ne 0 && -n "${RUN_ROOT:-}" && -d "${RUN_ROOT:-}" ]]; then
+    printf '\nCollecting smoke failure artifacts in %s\n' "$ARTIFACTS" >&2
+    collect_artifacts || true
+  fi
+
+  if [[ -n "${RUN_ROOT:-}" && -f "$RUN_ROOT/cleanup.json" ]]; then
+    "$script_dir/clean" --run-dir "$RUN_ROOT" --status "$([[ $status -eq 0 ]] && printf success || printf failure)" --keep "$KEEP"
+    cleanup_status=$?
+    if [[ $cleanup_status -ne 0 ]]; then
+      printf 'Smoke cleanup failed with exit code %s. Run directory: %s\n' "$cleanup_status" "$RUN_ROOT" >&2
+      [[ $status -eq 0 ]] && status=$cleanup_status
+    fi
+  fi
+
+  if [[ $status -eq 0 ]]; then
+    printf '\nSmoke profile succeeded: %s\n' "$PROFILE"
+  else
+    printf '\nSmoke profile failed: %s\n' "$PROFILE" >&2
+  fi
+
+  exit "$status"
+}
+
+assert_file() {
+  [[ -f "$1" ]] || fail "Expected file to exist: $1"
+}
+
+assert_executable_file() {
+  [[ -x "$1" ]] || fail "Expected executable file to exist: $1"
+}
+
+assert_no_file() {
+  [[ ! -e "$1" ]] || fail "Expected file to be absent: $1"
+}
+
+assert_file_contains() {
+  local file="$1"
+  local needle="$2"
+
+  assert_file "$file"
+  grep -F -- "$needle" "$file" >/dev/null || fail "Expected $file to contain: $needle"
+}
+
+assert_env_var_equals() {
+  local file="$1"
+  local key="$2"
+  local expected="$3"
+
+  assert_file "$file"
+  grep -Fx -- "$key=$expected" "$file" >/dev/null || fail "Expected $file to contain exact env assignment: $key=$expected"
+}
+
+assert_generated_files() {
+  assert_executable_file "$APP_DIR/local"
+  assert_file "$APP_DIR/tools/agent-ready/local.sh"
+  assert_file "$APP_DIR/tools/agent-ready/lib/common.sh"
+  assert_file "$APP_DIR/tools/agent-ready/lib/worktrees.sh"
+  assert_file "$APP_DIR/docker-compose.yml"
+  assert_file "$APP_DIR/.agent-ready/config.json"
+  assert_file "$APP_DIR/.agent-ready/worktree.json"
+  assert_file "$APP_DIR/.agent-ready/worktrees.json"
+  assert_file "$APP_DIR/.env.testing.example"
+  assert_no_file "$APP_DIR/docker-compose.shared.yml"
+  assert_file_contains "$APP_DIR/.agent-ready/worktree.json" "\"runtime\": \"$RUNTIME\""
+  assert_file_contains "$APP_DIR/.agent-ready/worktree.json" "\"databaseEngine\": \"$DATABASE\""
+  assert_file_contains "$APP_DIR/.agent-ready/worktree.json" "\"routeDomain\": \"$ROUTE_DOMAIN\""
+
+  if [[ "$RUNTIME" == "frankenphp" ]]; then
+    assert_file "$APP_DIR/docker/agent-ready/frankenphp/Dockerfile"
+    assert_file "$APP_DIR/docker/agent-ready/frankenphp/Caddyfile"
+    assert_no_file "$APP_DIR/docker/agent-ready/php-fpm/Dockerfile"
+  else
+    assert_file "$APP_DIR/docker/agent-ready/php-fpm/Dockerfile"
+    assert_file "$APP_DIR/docker/agent-ready/nginx/default.conf"
+    assert_no_file "$APP_DIR/docker/agent-ready/frankenphp/Dockerfile"
+  fi
+}
+
+database_host() {
+  if [[ "$DATABASE" == "pgsql" ]]; then
+    printf 'postgres\n'
+  else
+    printf 'mysql\n'
+  fi
+}
+
+database_port() {
+  if [[ "$DATABASE" == "pgsql" ]]; then
+    printf '5432\n'
+  else
+    printf '3306\n'
+  fi
+}
+
+assert_runtime_env() {
+  local root="$1"
+  local app_host="$2"
+  local namespace="$3"
+  local worktree_id="$4"
+  local db_host
+  local db_port
+  local derived
+  local REDIS_PREFIX=""
+  local HORIZON_PREFIX=""
+
+  db_host="$(database_host)"
+  db_port="$(database_port)"
+  derived="$(mktemp)"
+  "$SERVICES_HOME/bin/derive-checkout" \
+    --project-id="$APP_SLUG" \
+    --worktree-id="$worktree_id" \
+    --database="$DATABASE" \
+    --format=env > "$derived"
+  set -a
+  # shellcheck source=/dev/null
+  source "$derived"
+  set +a
+  rm -f "$derived"
+
+  [[ -n "$REDIS_PREFIX" ]] || fail "shared-services derive-checkout did not provide REDIS_PREFIX for $worktree_id."
+  assert_file "$root/.env"
+  assert_file "$root/.env.testing"
+  assert_file_contains "$root/.env" "APP_URL=https://$app_host"
+  assert_file_contains "$root/.env" "DB_CONNECTION=$DATABASE"
+  assert_file_contains "$root/.env" "DB_HOST=$db_host"
+  assert_file_contains "$root/.env" "DB_PORT=$db_port"
+  assert_file_contains "$root/.env" "DB_DATABASE=$namespace"
+  assert_file_contains "$root/.env" "DB_USERNAME=app"
+  assert_file_contains "$root/.env" "DB_PASSWORD=secret"
+  assert_file_contains "$root/.env" "REDIS_HOST=valkey"
+  assert_env_var_equals "$root/.env" "REDIS_PREFIX" "$REDIS_PREFIX"
+  assert_file_contains "$root/.env" "COMPOSE_PROJECT_NAME=$namespace"
+  assert_file_contains "$root/.env" "APP_SERVICE=app"
+  assert_file_contains "$root/.env.testing" "DB_CONNECTION=$DATABASE"
+  assert_file_contains "$root/.env.testing" "DB_HOST=$db_host"
+  assert_file_contains "$root/.env.testing" "DB_PORT=$db_port"
+  assert_file_contains "$root/.env.testing" "DB_DATABASE=${namespace}_test"
+  assert_env_var_equals "$root/.env.testing" "REDIS_PREFIX" "$REDIS_PREFIX"
+
+  if [[ "$HORIZON_BOOL" == "true" ]]; then
+    [[ -n "$HORIZON_PREFIX" ]] || fail "shared-services derive-checkout did not provide HORIZON_PREFIX for $worktree_id."
+    assert_env_var_equals "$root/.env" "HORIZON_PREFIX" "$HORIZON_PREFIX"
+    assert_env_var_equals "$root/.env.testing" "HORIZON_PREFIX" "$HORIZON_PREFIX"
+  fi
+}
+
+curl_https_route() {
+  local host="$1"
+  local output="$2"
+  local attempt=1
+
+  mkdir -p "$(dirname "$output")"
+  while ((attempt <= HTTP_RETRIES)); do
+    if curl -fsSk --connect-timeout 5 --max-time 20 --resolve "$host:443:127.0.0.1" "https://$host/" > "$output"; then
+      return 0
+    fi
+    sleep "$HTTP_RETRY_DELAY"
+    attempt=$((attempt + 1))
+  done
+
+  curl -vk --connect-timeout 5 --max-time 20 --resolve "$host:443:127.0.0.1" "https://$host/" > "$output" 2>&1
+}
+
+ensure_git_baseline() {
+  if ! git -C "$APP_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    git -C "$APP_DIR" init -b main
+  fi
+
+  git -C "$APP_DIR" config user.name "Agent Ready Smoke"
+  git -C "$APP_DIR" config user.email "agent-ready-smoke@example.test"
+  git -C "$APP_DIR" add -A
+  if ! git -C "$APP_DIR" diff --cached --quiet || ! git -C "$APP_DIR" rev-parse --verify HEAD >/dev/null 2>&1; then
+    git -C "$APP_DIR" commit -m "Agent-Ready smoke baseline"
+  fi
+}
+
+create_laravel_app() {
+  composer_exec "$RUN_ROOT" create-project laravel/laravel "$APP_SLUG" "$LARAVEL_VERSION" --no-interaction --prefer-dist --remove-vcs
+}
+
+configure_path_repository() {
+  local repo_url
+  local repo_json
+
+  if [[ "$TOOL_MODE" == "host" ]]; then
+    repo_url="$PACKAGE_ROOT"
+  else
+    repo_url="/agent-ready-installer"
+  fi
+
+  repo_json="{\"type\":\"path\",\"url\":\"$(json_escape "$repo_url")\",\"options\":{\"symlink\":false}}"
+  composer_exec "$APP_DIR" config repositories.agent-ready "$repo_json"
+}
+
+require_package() {
+  composer_exec "$APP_DIR" require --dev "$PACKAGE_NAME:$PACKAGE_CONSTRAINT" --no-interaction --prefer-dist -W
+}
+
+run_installer() {
+  local args=(
+    artisan agent-ready:install
+    --no-interaction
+    --host-root="$APP_DIR"
+    --traefik-home="$TRAEFIK_HOME"
+    --services-home="$SERVICES_HOME"
+    --runtime="$RUNTIME"
+    --database="$DATABASE"
+    --route-domain="$ROUTE_DOMAIN"
+    --local-agent-notes
+    --agent-skills
+    --decision-notes
+  )
+
+  if [[ "$HORIZON_BOOL" == "true" ]]; then
+    args+=(--horizon)
+  fi
+
+  php_exec "$APP_DIR" "${args[@]}"
+}
+
+run_main_runtime() {
+  local namespace="${APP_SLUG//-/_}"
+
+  MAIN_RUNTIME_STARTED=true
+  write_cleanup_state
+  run_step main-local-up run_in "$APP_DIR" ./local up --wait
+  assert_runtime_env "$APP_DIR" "$ROUTE_DOMAIN" "$namespace" "$APP_SLUG"
+  run_step main-migrate run_in "$APP_DIR" ./local artisan migrate --force
+  run_step main-test run_in "$APP_DIR" ./local test
+  run_step main-about run_in "$APP_DIR" ./local sail a about
+}
+
+run_worktree_smoke() {
+  local namespace="${APP_SLUG//-/_}_${WORKTREE_ID//-/_}"
+  local worktree_host="$WORKTREE_ID.$ROUTE_DOMAIN"
+
+  run_step main-git-baseline ensure_git_baseline
+  WORKTREE_CREATED=true
+  WORKTREE_REMOVED=false
+  write_cleanup_state
+  run_step worktree-create run_in "$APP_DIR" ./local worktree create "$WORKTREE_DIR" --branch "$WORKTREE_BRANCH" --id "$WORKTREE_ID"
+  run_step worktree-composer-install composer_exec "$WORKTREE_DIR" install --prefer-dist --no-interaction
+  WORKTREE_RUNTIME_STARTED=true
+  write_cleanup_state
+  run_step worktree-local-up run_in "$WORKTREE_DIR" ./local up --wait
+  assert_runtime_env "$WORKTREE_DIR" "$worktree_host" "$namespace" "$WORKTREE_ID"
+  run_step worktree-migrate run_in "$WORKTREE_DIR" ./local artisan migrate --force
+  run_step worktree-test run_in "$WORKTREE_DIR" ./local test
+  run_step worktree-about run_in "$WORKTREE_DIR" ./local sail a about
+  run_step worktree-http curl_https_route "$worktree_host" "$ARTIFACTS/http/worktree-response.html"
+  run_step worktree-remove run_in "$APP_DIR" ./local worktree remove "$WORKTREE_ID" --force
+  WORKTREE_REMOVED=true
+  write_cleanup_state
+
+  [[ ! -e "$WORKTREE_DIR" ]] || fail "Expected worktree directory to be removed: $WORKTREE_DIR"
+  if git -C "$APP_DIR" worktree list --porcelain | grep -F -- "$WORKTREE_DIR" >/dev/null; then
+    fail "Expected Git worktree list not to contain removed worktree: $WORKTREE_DIR"
+  fi
+}
+
+preflight
+
+if [[ -e "$RUN_ROOT" ]]; then
+  fail "Run directory already exists; choose another --run-id or clean it first: $RUN_ROOT"
+fi
+
+mkdir -p "$RUN_ROOT/worktrees" "$COMMAND_LOG_DIR"
+write_cleanup_state
+trap on_exit EXIT
+
+printf 'Smoke run: %s\n' "$RUN_ID"
+printf 'Profile: %s, runtime: %s, database: %s, horizon: %s\n' "$PROFILE" "$RUNTIME" "$DATABASE" "$HORIZON_BOOL"
+printf 'Run directory: %s\n' "$RUN_ROOT"
+printf 'Package root: %s\n' "$PACKAGE_ROOT"
+printf 'Tool mode: %s\n' "$TOOL_MODE"
+
+APP_CREATED=true
+write_cleanup_state
+run_step create-laravel-app create_laravel_app
+run_step composer-path-repository configure_path_repository
+run_step composer-require-package require_package
+run_step agent-ready-install run_installer
+assert_generated_files
+
+if profile_has_runtime; then
+  run_main_runtime
+fi
+
+if profile_has_http; then
+  run_step main-http curl_https_route "$ROUTE_DOMAIN" "$ARTIFACTS/http/app-response.html"
+fi
+
+if profile_has_worktree; then
+  run_worktree_smoke
+fi

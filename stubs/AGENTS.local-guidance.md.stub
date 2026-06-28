@@ -1,0 +1,1 @@
+- Also read `{{ agents_local }}` when it exists. It is ignored local guidance for machine-specific setup, secrets references, and personal agent preferences; do not commit it.

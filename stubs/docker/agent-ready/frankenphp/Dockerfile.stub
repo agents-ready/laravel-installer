@@ -1,0 +1,12 @@
+FROM dunglas/frankenphp:1.4.0-php8.4
+
+WORKDIR /app
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        unzip{{ database_packages }} \
+    && docker-php-ext-install {{ database_extension }} \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=composer:2.9.2 /usr/bin/composer /usr/bin/composer
+COPY Caddyfile /etc/caddy/Caddyfile

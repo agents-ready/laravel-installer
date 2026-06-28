@@ -1,0 +1,3 @@
+# Bootstrap Current Checkout
+
+Use `./local up` for local services, `./local npm install` before frontend work, `./local agents link` to activate tracked skills, and `./local test` for the application test suite.

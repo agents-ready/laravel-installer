@@ -1,0 +1,237 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SMOKE_ROOT="${AGENT_READY_SMOKE_ROOT:-/tmp/opencode/agent-ready-installer-smoke}"
+RUN_DIR="${AGENT_READY_SMOKE_RUN_DIR:-}"
+KEEP="${AGENT_READY_SMOKE_KEEP:-failure}"
+STATUS="failure"
+
+usage() {
+  cat >&2 <<'USAGE'
+Usage: scripts/smoke/clean [options]
+
+Options:
+  --run-dir <path>       Directory containing cleanup.json for one smoke run
+  --root <path>          Alias for --run-dir when the path contains cleanup.json; otherwise a smoke root with exactly one recorded run
+  --keep never|failure|always
+  --status success|failure
+
+The cleaner only acts on identities recorded in cleanup.json. It never runs global Docker prune commands.
+USAGE
+}
+
+fail() {
+  printf 'smoke clean: %s\n' "$*" >&2
+  exit 1
+}
+
+json_value() {
+  local file="$1"
+  local key="$2"
+
+  [[ -f "$file" ]] || return 0
+  awk -F'"' -v key="$key" '
+    $2 == key {
+      value = $0
+      sub(/^[^:]*:[[:space:]]*/, "", value)
+      sub(/,[[:space:]]*$/, "", value)
+      sub(/^"/, "", value)
+      sub(/"$/, "", value)
+      gsub(/\\"/, "\"", value)
+      gsub(/\\\\/, "\\", value)
+      print value
+      exit
+    }
+  ' "$file"
+}
+
+resolve_run_dir_from_root() {
+  local root="$1"
+  local matches=()
+
+  if [[ -f "$root/cleanup.json" ]]; then
+    printf '%s\n' "$(cd "$root" && pwd -P)"
+    return 0
+  fi
+
+  matches=("$root"/*/cleanup.json)
+  if [[ ${#matches[@]} -eq 1 && -f "${matches[0]}" ]]; then
+    printf '%s\n' "$(cd "$(dirname "${matches[0]}")" && pwd -P)"
+    return 0
+  fi
+
+  if [[ ${#matches[@]} -gt 1 && -f "${matches[0]}" ]]; then
+    fail "Multiple recorded runs found under $root; pass --run-dir for one run."
+  fi
+
+  fail "No cleanup.json found under $root."
+}
+
+while (($#)); do
+  case "$1" in
+    --run-dir|--root|--keep|--status)
+      (($# >= 2)) || fail "Missing value for $1."
+      case "$1" in
+        --run-dir) RUN_DIR="$2" ;;
+        --root) RUN_DIR="$(resolve_run_dir_from_root "$2")" ;;
+        --keep) KEEP="$2" ;;
+        --status) STATUS="$2" ;;
+      esac
+      shift 2
+      ;;
+    --run-dir=*) RUN_DIR="${1#--run-dir=}"; shift ;;
+    --root=*) RUN_DIR="$(resolve_run_dir_from_root "${1#--root=}")"; shift ;;
+    --keep=*) KEEP="${1#--keep=}"; shift ;;
+    --status=*) STATUS="${1#--status=}"; shift ;;
+    -h|--help) usage; exit 0 ;;
+    *) fail "Unknown option: $1" ;;
+  esac
+done
+
+case "$KEEP" in
+  never|failure|always) ;;
+  *) fail "--keep must be one of: never, failure, always." ;;
+esac
+
+case "$STATUS" in
+  success|failure) ;;
+  *) fail "--status must be one of: success, failure." ;;
+esac
+
+if [[ -z "$RUN_DIR" ]]; then
+  RUN_DIR="$(resolve_run_dir_from_root "$SMOKE_ROOT")"
+fi
+
+RUN_DIR="$(cd "$RUN_DIR" && pwd -P)"
+CLEANUP_FILE="$RUN_DIR/cleanup.json"
+[[ -f "$CLEANUP_FILE" ]] || fail "Missing cleanup state: $CLEANUP_FILE"
+
+RUN_ROOT="$(json_value "$CLEANUP_FILE" runRoot)"
+APP_DIR="$(json_value "$CLEANUP_FILE" appDir)"
+APP_PROJECT_ID="$(json_value "$CLEANUP_FILE" appProjectId)"
+WORKTREE_DIR="$(json_value "$CLEANUP_FILE" worktreeDir)"
+WORKTREE_ID="$(json_value "$CLEANUP_FILE" worktreeId)"
+WORKTREE_BRANCH="$(json_value "$CLEANUP_FILE" worktreeBranch)"
+DATABASE="$(json_value "$CLEANUP_FILE" database)"
+HORIZON="$(json_value "$CLEANUP_FILE" horizon)"
+APP_CREATED="$(json_value "$CLEANUP_FILE" appCreated)"
+MAIN_RUNTIME_STARTED="$(json_value "$CLEANUP_FILE" mainRuntimeStarted)"
+WORKTREE_CREATED="$(json_value "$CLEANUP_FILE" worktreeCreated)"
+WORKTREE_RUNTIME_STARTED="$(json_value "$CLEANUP_FILE" worktreeRuntimeStarted)"
+WORKTREE_REMOVED="$(json_value "$CLEANUP_FILE" worktreeRemoved)"
+TRAEFIK_HOME="$(json_value "$CLEANUP_FILE" traefikHome)"
+SERVICES_HOME="$(json_value "$CLEANUP_FILE" servicesHome)"
+
+[[ -n "$RUN_ROOT" ]] || fail "cleanup.json is missing runRoot."
+[[ "$RUN_ROOT" == "$RUN_DIR" ]] || fail "cleanup.json runRoot does not match run dir: $RUN_ROOT != $RUN_DIR"
+[[ "$RUN_ROOT" != "/" && "$RUN_ROOT" != "/tmp" && "$RUN_ROOT" != "/tmp/opencode" ]] || fail "Refusing unsafe runRoot: $RUN_ROOT"
+
+warn() {
+  printf 'smoke clean: %s\n' "$*" >&2
+}
+
+best_effort() {
+  local label="$1"
+  shift
+
+  if ! "$@"; then
+    warn "best-effort cleanup failed: $label"
+    return 1
+  fi
+
+  return 0
+}
+
+is_true() {
+  [[ "$1" == "true" ]]
+}
+
+run_local_down() {
+  local dir="$1"
+
+  [[ -x "$dir/local" ]] || return 0
+  (cd "$dir" && ./local down --volumes --remove-orphans)
+}
+
+remove_managed_worktree() {
+  if [[ -n "$APP_DIR" && -x "$APP_DIR/local" && -n "$WORKTREE_ID" ]]; then
+    (cd "$APP_DIR" && ./local worktree remove "$WORKTREE_ID" --force)
+    return $?
+  fi
+
+  return 0
+}
+
+fallback_remove_worktree() {
+  [[ -n "$APP_DIR" && -d "$APP_DIR/.git" && -n "$WORKTREE_DIR" && -e "$WORKTREE_DIR" ]] || return 0
+  git -C "$APP_DIR" worktree remove --force "$WORKTREE_DIR"
+}
+
+delete_smoke_branch() {
+  [[ -n "$APP_DIR" && -d "$APP_DIR/.git" && -n "$WORKTREE_BRANCH" ]] || return 0
+  git -C "$APP_DIR" rev-parse --verify --quiet "refs/heads/$WORKTREE_BRANCH" >/dev/null || return 0
+  git -C "$APP_DIR" branch -D "$WORKTREE_BRANCH"
+}
+
+cleanup_shared_identity() {
+  local project_id="$1"
+  local worktree_id="$2"
+
+  [[ -n "$project_id" && -n "$worktree_id" ]] || return 0
+  [[ -x "$SERVICES_HOME/bin/drop-checkout" && -x "$SERVICES_HOME/bin/clean-prefix" ]] || return 0
+
+  "$SERVICES_HOME/bin/drop-checkout" --project-id="$project_id" --worktree-id="$worktree_id" --database="$DATABASE" || true
+  "$SERVICES_HOME/bin/clean-prefix" --project-id="$project_id" --worktree-id="$worktree_id" --kind=valkey || true
+  if [[ "$HORIZON" == "true" ]]; then
+    "$SERVICES_HOME/bin/clean-prefix" --project-id="$project_id" --worktree-id="$worktree_id" --kind=horizon || true
+  fi
+}
+
+refresh_traefik() {
+  [[ -x "$TRAEFIK_HOME/bin/ensure" ]] || return 0
+  "$TRAEFIK_HOME/bin/ensure"
+}
+
+should_remove_run_dir() {
+  case "$KEEP" in
+    never) return 0 ;;
+    always) return 1 ;;
+    failure) [[ "$STATUS" == "success" ]] ;;
+  esac
+}
+
+printf 'Cleaning recorded smoke run: %s\n' "$RUN_DIR"
+
+if is_true "$WORKTREE_RUNTIME_STARTED"; then
+  best_effort worktree-down run_local_down "$WORKTREE_DIR" || true
+fi
+
+if is_true "$WORKTREE_CREATED" && ! is_true "$WORKTREE_REMOVED"; then
+  best_effort managed-worktree-remove remove_managed_worktree || true
+fi
+
+best_effort fallback-worktree-remove fallback_remove_worktree || true
+best_effort smoke-branch-delete delete_smoke_branch || true
+
+if is_true "$MAIN_RUNTIME_STARTED"; then
+  best_effort app-down run_local_down "$APP_DIR" || true
+fi
+
+if is_true "$WORKTREE_RUNTIME_STARTED"; then
+  cleanup_shared_identity "$APP_PROJECT_ID" "$WORKTREE_ID"
+fi
+
+if is_true "$MAIN_RUNTIME_STARTED"; then
+  cleanup_shared_identity "$APP_PROJECT_ID" "$APP_PROJECT_ID"
+fi
+
+if is_true "$MAIN_RUNTIME_STARTED" || is_true "$WORKTREE_RUNTIME_STARTED"; then
+  best_effort traefik-refresh refresh_traefik || true
+fi
+
+if should_remove_run_dir; then
+  rm -rf "$RUN_DIR"
+  printf 'Removed smoke run directory: %s\n' "$RUN_DIR"
+else
+  printf 'Kept smoke run directory: %s\n' "$RUN_DIR"
+fi

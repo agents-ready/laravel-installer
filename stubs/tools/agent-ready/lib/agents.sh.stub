@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+
+link_agents() {
+  mkdir -p .agents/skills
+
+  if [[ -d .ai/skills ]]; then
+    for skill in .ai/skills/*; do
+      [[ -d "${skill}" ]] || continue
+      local name
+      name=$(basename "${skill}")
+      if [[ ! -e ".agents/skills/${name}" ]]; then
+        ln -s "../../.ai/skills/${name}" ".agents/skills/${name}"
+      fi
+    done
+  fi
+
+  for tool in .claude .cursor; do
+    mkdir -p "${tool}"
+    if [[ ! -e "${tool}/skills" ]]; then
+      ln -s ../.agents/skills "${tool}/skills"
+    elif [[ ! -L "${tool}/skills" ]]; then
+      echo "Skipping ${tool}/skills because it already exists and is not a symlink." >&2
+    fi
+  done
+}

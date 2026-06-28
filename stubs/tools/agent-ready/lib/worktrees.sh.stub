@@ -1,0 +1,441 @@
+#!/usr/bin/env bash
+
+worktree_paths() {
+  local main
+
+  main="$(main_worktree)"
+  git -C "$main" worktree list --porcelain | awk '/^worktree / { print substr($0, 10) }'
+}
+
+require_git_repo() {
+  local main
+
+  main="$(main_worktree)"
+  if git -C "$main" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    return 0
+  fi
+
+  echo "Agent-Ready worktree lifecycle requires this project to be a Git repository." >&2
+  echo "Run git init and commit the generated files before creating managed worktrees." >&2
+  exit 1
+}
+
+worktree_id_exists() {
+  local wanted="$1"
+  local path
+  local existing
+
+  while IFS= read -r path; do
+    existing="$(json_value "$path/.agent-ready/worktree.json" "worktreeId")"
+    if [[ "$existing" == "$wanted" ]]; then
+      return 0
+    fi
+  done < <(worktree_paths)
+
+  return 1
+}
+
+next_worktree_id() {
+  local target="$1"
+  local requested="${2:-}"
+  local candidate
+
+  if [[ -n "$requested" ]]; then
+    candidate="$(slugify "$requested")"
+  else
+    candidate="$(slugify "$(basename "$target")")"
+  fi
+
+  if worktree_id_exists "$candidate"; then
+    echo "Refusing to create a managed worktree because the ID already exists: $candidate" >&2
+    echo "Choose another path or pass --id <unique-id>." >&2
+    exit 1
+  fi
+
+  printf '%s\n' "$candidate"
+}
+
+write_worktree_state() {
+  local target="$1"
+  local id="$2"
+  local main="$3"
+  local main_state
+  local project_id
+  local runtime
+  local database_engine
+  local horizon
+  local route_domain
+
+  main_state="$main/.agent-ready/worktree.json"
+  project_id="$(json_value "$main_state" "projectId")"
+  [[ -n "$project_id" ]] || project_id="$(project_slug)"
+  runtime="$(json_value "$main_state" "runtime")"
+  [[ -n "$runtime" ]] || runtime="frankenphp"
+  database_engine="$(json_value "$main_state" "databaseEngine")"
+  [[ -n "$database_engine" ]] || database_engine="pgsql"
+  horizon="$(json_value "$main_state" "horizon")"
+  [[ "$horizon" == "true" ]] || horizon="false"
+  route_domain="$(json_value "$main_state" "routeDomain")"
+  [[ -n "$route_domain" ]] || route_domain="$project_id.localhost"
+
+  mkdir -p "$target/.agent-ready"
+  cat > "$target/.agent-ready/worktree.json" <<JSON
+{
+  "version": 1,
+  "root": "$(json_escape "$target")",
+  "mainWorktree": "$(json_escape "$main")",
+  "projectId": "$(json_escape "$project_id")",
+  "worktreeId": "$(json_escape "$id")",
+  "runtime": "$(json_escape "$runtime")",
+  "databaseEngine": "$(json_escape "$database_engine")",
+  "horizon": $horizon,
+  "routeDomain": "$(json_escape "$route_domain")"
+}
+JSON
+}
+
+state_app_host() {
+  local state="$1"
+  local project_id
+  local worktree_id
+  local route_domain
+
+  project_id="$(json_value "$state" "projectId")"
+  worktree_id="$(json_value "$state" "worktreeId")"
+  [[ -n "$project_id" ]] || project_id="$worktree_id"
+  route_domain="$(json_value "$state" "routeDomain")"
+  [[ -n "$route_domain" ]] || route_domain="$project_id.localhost"
+
+  if [[ "$project_id" == "$worktree_id" ]]; then
+    printf '%s\n' "$route_domain"
+  else
+    printf '%s.%s\n' "$worktree_id" "$route_domain"
+  fi
+}
+
+write_worktrees_index() {
+  local main
+  local tmp
+  local first="true"
+  local path
+  local branch
+  local id
+  local app_host
+  local state
+
+  require_git_repo
+  main="$(main_worktree)"
+  mkdir -p "$main/.agent-ready"
+  tmp="$(mktemp)"
+
+  {
+    printf '{\n'
+    printf '  "version": 1,\n'
+    printf '  "worktrees": [\n'
+
+    while IFS= read -r path; do
+      state="$path/.agent-ready/worktree.json"
+      [[ -f "$state" ]] || continue
+
+      id="$(json_value "$state" "worktreeId")"
+      app_host="$(state_app_host "$state")"
+      branch="$(git -C "$path" branch --show-current 2>/dev/null || true)"
+      [[ -n "$branch" ]] || branch="(detached)"
+
+      if [[ "$first" == "true" ]]; then
+        first="false"
+      else
+        printf ',\n'
+      fi
+
+      printf '    {\n'
+      printf '      "id": "%s",\n' "$(json_escape "$id")"
+      printf '      "path": "%s",\n' "$(json_escape "$path")"
+      printf '      "branch": "%s",\n' "$(json_escape "$branch")"
+      printf '      "appHost": "%s"\n' "$(json_escape "$app_host")"
+      printf '    }'
+    done < <(git -C "$main" worktree list --porcelain | awk '/^worktree / { print substr($0, 10) }')
+
+    printf '\n  ]\n'
+    printf '}\n'
+  } > "$tmp"
+
+  mv "$tmp" "$main/$index_file"
+}
+
+list_worktrees() {
+  local path
+  local state
+  local id
+  local branch
+  local app_host
+
+  require_git_repo
+  write_worktrees_index
+  printf '%-24s %-28s %-42s %s\n' "ID" "BRANCH" "APP HOST" "PATH"
+
+  while IFS= read -r path; do
+    state="$path/.agent-ready/worktree.json"
+    [[ -f "$state" ]] || continue
+
+    id="$(json_value "$state" "worktreeId")"
+    app_host="$(state_app_host "$state")"
+    branch="$(git -C "$path" branch --show-current 2>/dev/null || true)"
+    [[ -n "$branch" ]] || branch="(detached)"
+
+    printf '%-24s %-28s %-42s %s\n' "$id" "$branch" "$app_host" "$path"
+  done < <(worktree_paths)
+}
+
+resolve_create_target() {
+  local target="$1"
+  local parent
+  local basename_value
+
+  case "$target" in
+    /*) ;;
+    *) target="$(current_root)/$target" ;;
+  esac
+
+  parent="$(dirname "$target")"
+  basename_value="$(basename "$target")"
+  mkdir -p "$parent"
+  printf '%s/%s\n' "$(cd "$parent" && pwd -P)" "$basename_value"
+}
+
+resolve_existing_worktree() {
+  local spec="$1"
+  local path
+  local state
+  local id
+
+  if [[ -d "$spec" ]]; then
+    (cd "$spec" && pwd -P)
+    return 0
+  fi
+
+  while IFS= read -r path; do
+    state="$path/.agent-ready/worktree.json"
+    id="$(json_value "$state" "worktreeId")"
+    if [[ "$id" == "$spec" ]]; then
+      printf '%s\n' "$path"
+      return 0
+    fi
+  done < <(worktree_paths)
+
+  echo "Unable to resolve worktree: $spec" >&2
+  exit 1
+}
+
+ensure_clean_or_forced() {
+  local target="$1"
+  local force="$2"
+  local changes
+
+  changes="$(git -C "$target" status --porcelain --untracked-files=all | awk '{ path = substr($0, 4); if (path != ".agent-ready/worktree.json" && path != ".agent-ready/worktrees.json") print }')"
+  if [[ -z "$changes" || "$force" == "true" ]]; then
+    return 0
+  fi
+
+  echo "Refusing to remove a worktree with tracked or untracked changes: $target" >&2
+  echo "Run 'git -C "$target" status --short --untracked-files=all' or pass --force." >&2
+  exit 1
+}
+
+ensure_owned_worktree() {
+  local target="$1"
+  local main="$2"
+  local state="$target/.agent-ready/worktree.json"
+  local owner
+  local id
+
+  if [[ ! -f "$state" ]]; then
+    echo "Refusing to remove an unmanaged directory: $target" >&2
+    echo "Expected Agent-Ready state at $state." >&2
+    exit 1
+  fi
+
+  owner="$(json_value "$state" "mainWorktree")"
+  id="$(json_value "$state" "worktreeId")"
+
+  if [[ -z "$id" || "$owner" != "$main" ]]; then
+    echo "Refusing to remove a worktree that is not owned by this main checkout: $target" >&2
+    exit 1
+  fi
+}
+
+propagate_local_files() {
+  local target="$1"
+  local main
+
+  main="$(main_worktree)"
+
+  copy_if_present "$main/auth.json" "$target/auth.json"
+  link_if_present "$main/AGENTS.local.md" "$target/AGENTS.local.md"
+  link_if_present "$main/opencode.jsonc" "$target/opencode.jsonc"
+  link_if_present "$main/.mcp.json" "$target/.mcp.json"
+}
+
+rollback_created_worktree() {
+  local main="$1"
+  local target="$2"
+  local branch="$3"
+
+  echo "Rolling back failed managed worktree creation: $target" >&2
+  git -C "$main" worktree remove --force "$target" 2>/dev/null || true
+  git -C "$main" branch -D "$branch" >/dev/null 2>&1 || true
+  write_worktrees_index || true
+}
+
+create_worktree() {
+  local target=""
+  local branch=""
+  local base_ref=""
+  local requested_id=""
+  local main
+  local id
+
+  while (($#)); do
+    case "$1" in
+      --branch|--base|--id)
+        if (($# < 2)); then
+          echo "Missing value for $1." >&2
+          exit 1
+        fi
+        case "$1" in
+          --branch) branch="$2" ;;
+          --base) base_ref="$2" ;;
+          --id) requested_id="$2" ;;
+        esac
+        shift
+        ;;
+      --branch=*) branch="${1#--branch=}" ;;
+      --base=*) base_ref="${1#--base=}" ;;
+      --id=*) requested_id="${1#--id=}" ;;
+      --*)
+        echo "Unknown option for worktree create: $1" >&2
+        exit 1
+        ;;
+      *)
+        if [[ -n "$target" ]]; then
+          echo "Unexpected extra worktree path: $1" >&2
+          exit 1
+        fi
+        target="$1"
+        ;;
+    esac
+    shift
+  done
+
+  if [[ -z "$target" || -z "$branch" ]]; then
+    echo "Usage: ./local worktree create <path> --branch <branch> [--base <ref>] [--id <id>]" >&2
+    exit 2
+  fi
+
+  require_git_repo
+  main="$(main_worktree)"
+  target="$(resolve_create_target "$target")"
+  base_ref="${base_ref:-$(git -C "$main" rev-parse HEAD)}"
+
+  if [[ -e "$target" ]]; then
+    echo "Refusing to create a managed worktree because the target path already exists: $target" >&2
+    exit 1
+  fi
+
+  if ! git -C "$main" check-ref-format --branch "$branch" >/dev/null 2>&1; then
+    echo "Invalid branch name: $branch" >&2
+    exit 1
+  fi
+
+  if git -C "$main" rev-parse --verify --quiet "refs/heads/$branch" >/dev/null; then
+    echo "Refusing to create a managed worktree because the branch already exists: $branch" >&2
+    exit 1
+  fi
+
+  if ! git -C "$main" rev-parse --verify --quiet "$base_ref^{commit}" >/dev/null; then
+    echo "Unable to resolve base ref: $base_ref" >&2
+    exit 1
+  fi
+
+  id="$(next_worktree_id "$target" "$requested_id")"
+
+  echo "Creating Git worktree: $target"
+  git -C "$main" worktree add -b "$branch" "$target" "$base_ref"
+
+  if [[ ! -x "$target/local" ]]; then
+    echo "The new worktree does not contain ./local." >&2
+    echo "Commit the Agent-Ready generated files before creating managed worktrees." >&2
+    rollback_created_worktree "$main" "$target" "$branch"
+    exit 1
+  fi
+
+  write_worktree_state "$target" "$id" "$main"
+  propagate_local_files "$target"
+{{ agent_link_after_create }}
+  write_worktrees_index
+
+  echo "Created managed worktree '$id' at $target"
+  echo "Run: cd $target && ./local up"
+}
+
+remove_worktree() {
+  local force="false"
+  local spec=""
+  local main
+  local target
+
+  while (($#)); do
+    case "$1" in
+      --force) force="true" ;;
+      --*)
+        echo "Unknown option for worktree remove: $1" >&2
+        exit 1
+        ;;
+      *)
+        if [[ -n "$spec" ]]; then
+          echo "Unexpected extra worktree selector: $1" >&2
+          exit 1
+        fi
+        spec="$1"
+        ;;
+    esac
+    shift
+  done
+
+  require_git_repo
+  main="$(main_worktree)"
+  if [[ -z "$spec" ]]; then
+    target="$(current_root)"
+  else
+    target="$(resolve_existing_worktree "$spec")"
+  fi
+
+  if [[ "$target" == "$main" ]]; then
+    echo "Refusing to remove the main worktree: $main" >&2
+    exit 1
+  fi
+
+  ensure_owned_worktree "$target" "$main"
+  ensure_clean_or_forced "$target" "$force"
+
+  if docker_available; then
+    echo "Removing Docker resources and shared namespaces for worktree: $target"
+    (
+      cd "$target"
+      compose_run down --volumes --remove-orphans || true
+      ensure_shared_services
+      cleanup_shared_databases
+      cleanup_shared_valkey_namespaces
+      if [[ "$(state_value_or_default "horizon" "false")" == "true" ]]; then
+        cleanup_shared_horizon_namespaces
+      fi
+    )
+  else
+    echo "Docker is unavailable; skipping Docker resource and shared namespace cleanup for $target" >&2
+  fi
+
+  echo "Removing Git worktree directory: $target"
+  cd "$main"
+  git -C "$main" worktree remove --force "$target"
+  write_worktrees_index
+}

@@ -1,0 +1,17 @@
+# Worktree Lifecycle
+
+Use `./local worktree list` and `./local worktree status` before changing lifecycle state.
+
+Create linked worktrees with `./local worktree create <path> --branch <branch> [--base <ref>] [--id <id>]` after the Agent-Ready generated files are committed. The wrapper assigns a per-app worktree ID, refuses ID collisions, writes `.agent-ready/worktree.json`, updates the main checkout's `.agent-ready/worktrees.json`, and propagates local files such as `AGENTS.local.md`, `opencode.jsonc`, `.mcp.json`, and `auth.json` using Nexus-style copy/symlink rules.
+
+Use `./local worktree up` and `./local worktree down` for the current checkout. Worktrees delegate database and Valkey provisioning to the shared-services repo; each checkout uses derived database names and Redis prefixes. Use `./local worktree remove [id|path] [--force]` to remove linked worktrees, stop that checkout's app containers, and ask shared-services to clean its namespaces when Docker is available.
+
+Safety rules:
+
+- Do not remove the main checkout with the worktree command.
+- Do not remove unmanaged directories; removal must find `.agent-ready/worktree.json` owned by the main checkout.
+- Removal refuses tracked and untracked changes unless `--force` is passed.
+- Treat `.agent-ready/worktree.json` as the source of truth for cleanup identity.
+- Keep Git branches after removing linked worktree directories unless a human explicitly deletes them.
+
+When troubleshooting, inspect `.agent-ready/worktree.json`, `.agent-ready/worktrees.json` in the main checkout, `docker compose ps`, and shared Traefik status before guessing from path names.

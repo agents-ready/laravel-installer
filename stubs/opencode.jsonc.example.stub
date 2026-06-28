@@ -1,0 +1,11 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": [{{ instructions }}],
+  "mcp": {
+    "laravel-boost": {
+      "type": "local",
+      "enabled": false,
+      "command": ["./local", "mcp", "boost"]
+    }
+  }{{ skill_config }}
+}

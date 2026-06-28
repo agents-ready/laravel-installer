@@ -1,0 +1,167 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+tool_root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+source "$tool_root/lib/common.sh"
+{{ agent_source_line }}
+source "$tool_root/lib/worktrees.sh"
+
+usage() {
+  cat >&2 <<'USAGE'
+Usage: ./local <command> [args]
+
+Commands:
+  up                         Start local services
+  down                       Stop local services
+  status                     Show Compose service status
+  build                      Build local Docker images
+  php ...                    Run PHP in the app container
+  artisan ...                Run Artisan in the app container
+  a ...                      Alias for artisan
+  composer ...               Run Composer in the app container
+  test ...                   Run the Laravel test suite
+  shell                      Open a shell in the app container
+  assets dev                 Start Vite
+  assets build               Build frontend assets
+  npm ...                    Run npm in the Vite container
+  mcp boost                  Run Laravel Boost MCP over stdio
+  traefik ensure|status|prune
+{{ agent_usage_line }}
+  worktree list|create|up|down|status|remove
+  sail ...                   Compatibility alias for this wrapper
+USAGE
+}
+
+cmd=${1:-}
+if [[ -z "${cmd}" ]]; then
+  usage
+  exit 2
+fi
+shift || true
+
+case "${cmd}" in
+  up)
+    traefik_dir="$(traefik_home)" || exit $?
+    "$traefik_dir/bin/ensure"
+    ensure_shared_services
+    provision_shared_databases
+    materialize_runtime_env
+    compose_run up -d "$@"
+    "$traefik_dir/bin/ensure"
+    ;;
+  down)
+    compose_run down --remove-orphans "$@"
+    ;;
+  status)
+    [[ ! -f .agent-ready/worktree.json ]] || cat .agent-ready/worktree.json
+    compose_run ps "$@"
+    ;;
+  build)
+    compose_run build "$@"
+    ;;
+  php)
+    compose_exec app php "$@"
+    ;;
+  artisan|a)
+    compose_exec app php artisan "$@"
+    ;;
+  composer)
+    compose_exec app composer "$@"
+    ;;
+  test)
+    compose_exec app php artisan test "$@"
+    ;;
+  shell)
+    compose_exec app bash "$@"
+    ;;
+  assets)
+    sub=${1:-}
+    shift || true
+    case "${sub}" in
+      build)
+        compose_run run --rm --no-deps vite npm run build "$@"
+        ;;
+      dev)
+        traefik_dir="$(traefik_home)" || exit $?
+        "$traefik_dir/bin/ensure"
+        compose_run up vite "$@"
+        ;;
+      *)
+        echo "Usage: ./local assets {build|dev}" >&2
+        exit 2
+        ;;
+    esac
+    ;;
+  npm)
+    compose_run run --rm --no-deps vite npm "$@"
+    ;;
+  mcp)
+    sub=${1:-}
+    shift || true
+    case "${sub}" in
+      boost)
+        compose_run run --rm -T --no-deps app php artisan boost:mcp "$@"
+        ;;
+      *)
+        echo "Usage: ./local mcp boost" >&2
+        exit 2
+        ;;
+    esac
+    ;;
+  traefik)
+    sub=${1:-}
+    shift || true
+    case "${sub}" in
+      ensure|status|prune)
+        traefik_dir="$(traefik_home)" || exit $?
+        "$traefik_dir/bin/${sub}" "$@"
+        ;;
+      *)
+        echo "Usage: ./local traefik {ensure|status|prune}" >&2
+        exit 2
+        ;;
+    esac
+    ;;
+{{ agent_command_case }}
+  worktree)
+    sub=${1:-}
+    shift || true
+    case "${sub}" in
+      list)
+        list_worktrees
+        ;;
+      create)
+        create_worktree "$@"
+        ;;
+      up)
+        "$0" up "$@"
+        ;;
+      down)
+        "$0" down "$@"
+        ;;
+      status)
+        [[ ! -f .agent-ready/worktree.json ]] || cat .agent-ready/worktree.json
+        compose_run ps "$@"
+        ;;
+      remove)
+        remove_worktree "$@"
+        ;;
+      *)
+        echo "Usage: ./local worktree {list|create|up|down|status|remove}" >&2
+        exit 2
+        ;;
+    esac
+    ;;
+  sail)
+    if [[ $# -eq 0 ]]; then
+      usage
+      exit 2
+    fi
+    exec "$0" "$@"
+    ;;
+  *)
+    usage
+    exit 2
+    ;;
+esac

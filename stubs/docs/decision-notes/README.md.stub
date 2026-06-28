@@ -1,0 +1,9 @@
+# Decision Notes
+
+Use this directory for durable decisions that future agents or maintainers should understand.
+
+Write a note when a decision changes architecture, local infrastructure, deployment behavior, generated tooling, data ownership, or long-lived developer workflow.
+
+Keep notes short. Capture the context, the decision, why rejected alternatives were not chosen, and what would make the decision worth revisiting.
+
+Do not write notes for routine implementation details, temporary debugging, or changes already obvious from a small commit diff.
