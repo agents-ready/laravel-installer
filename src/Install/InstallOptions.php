@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace EdgarSedov\AgentReadyInstaller\Install;
+namespace AgentsReady\LaravelInstaller\Install;
 
 final readonly class InstallOptions
 {
@@ -21,10 +21,11 @@ final readonly class InstallOptions
         public bool $decisionNotes = false,
         public bool $localAgentNotes = false,
         public bool $agentSkills = false,
-        public string $toolsPath = 'tools/agent-ready',
-        public string $dockerPath = 'docker/agent-ready',
+        public string $toolsPath = 'tools/agents-ready',
+        public string $dockerPath = 'docker/agents-ready',
         public ?string $traefikHome = null,
         public ?string $servicesHome = null,
+        public ?string $projectSlug = null,
         public ?string $routeDomain = null,
         public string $runtime = self::DEFAULT_RUNTIME,
         public string $databaseEngine = self::DEFAULT_DATABASE_ENGINE,

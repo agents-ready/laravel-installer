@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace EdgarSedov\AgentReadyInstaller\Tests\Support;
+namespace AgentsReady\LaravelInstaller\Tests\Support;
 
 use FilesystemIterator;
 use RecursiveDirectoryIterator;

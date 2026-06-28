@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace EdgarSedov\AgentReadyInstaller\Install;
+namespace AgentsReady\LaravelInstaller\Install;
 
 final readonly class ProjectContext
 {
@@ -27,23 +27,33 @@ final readonly class ProjectContext
         return new self(rtrim($root, DIRECTORY_SEPARATOR), $composer);
     }
 
-    public function slug(): string
+    public function slug(?string $hostRoot = null): string
     {
         $name = $this->composer['name'] ?? null;
 
         if ($name === null || $name === 'laravel/laravel') {
-            $name = basename($this->root);
+            $name = basename($hostRoot ?? $this->root);
         }
 
-        $base = str_contains((string) $name, '/') ? substr((string) $name, strrpos((string) $name, '/') + 1) : (string) $name;
+        return $this->slugFrom((string) $name) ?? 'laravel-app';
+    }
+
+    public function defaultRouteDomain(?string $hostRoot = null): string
+    {
+        return $this->slug($hostRoot).'.localhost';
+    }
+
+    public static function normalizeSlug(string $value): ?string
+    {
+        $base = str_contains($value, '/') ? substr($value, strrpos($value, '/') + 1) : $value;
         $slug = strtolower((string) preg_replace('/[^a-zA-Z0-9]+/', '-', $base));
         $slug = trim($slug, '-');
 
-        return $slug !== '' ? substr($slug, 0, 48) : 'laravel-app';
+        return $slug !== '' ? substr($slug, 0, 48) : null;
     }
 
-    public function defaultRouteDomain(): string
+    private function slugFrom(string $value): ?string
     {
-        return $this->slug().'.localhost';
+        return self::normalizeSlug($value);
     }
 }

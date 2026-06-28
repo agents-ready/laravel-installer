@@ -54,7 +54,7 @@ case "${cmd}" in
     compose_run down --remove-orphans "$@"
     ;;
   status)
-    [[ ! -f .agent-ready/worktree.json ]] || cat .agent-ready/worktree.json
+    [[ ! -f .agents-ready/worktree.json ]] || cat .agents-ready/worktree.json
     compose_run ps "$@"
     ;;
   build)
@@ -141,7 +141,7 @@ case "${cmd}" in
         "$0" down "$@"
         ;;
       status)
-        [[ ! -f .agent-ready/worktree.json ]] || cat .agent-ready/worktree.json
+        [[ ! -f .agents-ready/worktree.json ]] || cat .agents-ready/worktree.json
         compose_run ps "$@"
         ;;
       remove)

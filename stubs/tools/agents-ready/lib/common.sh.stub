@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 
 compose=(docker compose --file docker-compose.yml)
-state_file=".agent-ready/worktree.json"
-index_file=".agent-ready/worktrees.json"
+state_file=".agents-ready/worktree.json"
+index_file=".agents-ready/worktrees.json"
 
 json_escape() {
   local value="$1"
@@ -77,7 +77,7 @@ main_worktree() {
 }
 
 main_state_file() {
-  printf '%s/.agent-ready/worktree.json\n' "$(main_worktree)"
+  printf '%s/.agents-ready/worktree.json\n' "$(main_worktree)"
 }
 
 state_value_or_default() {
@@ -143,41 +143,41 @@ load_worktree_env() {
   route_domain="$(state_value_or_default "routeDomain" "$(main_state_value_or_default "routeDomain" "$project_id.localhost")")"
   compose_project="$(checkout_namespace "$project_id" "$worktree_id")"
 
-  export AGENT_READY_PROJECT_ID
-  export AGENT_READY_WORKTREE_ID
-  export AGENT_READY_RUNTIME
-  export AGENT_READY_DATABASE_ENGINE
-  export AGENT_READY_COMPOSE_PROJECT
-  export AGENT_READY_HORIZON
+  export AGENTS_READY_PROJECT_ID
+  export AGENTS_READY_WORKTREE_ID
+  export AGENTS_READY_RUNTIME
+  export AGENTS_READY_DATABASE_ENGINE
+  export AGENTS_READY_COMPOSE_PROJECT
+  export AGENTS_READY_HORIZON
   export COMPOSE_PROJECT_NAME
-  export AGENT_READY_APP_ROUTER
-  export AGENT_READY_APP_SERVICE
-  export AGENT_READY_APP_HOST
-  export AGENT_READY_VITE_ROUTER
-  export AGENT_READY_VITE_SERVICE
-  export AGENT_READY_VITE_HOST
+  export AGENTS_READY_APP_ROUTER
+  export AGENTS_READY_APP_SERVICE
+  export AGENTS_READY_APP_HOST
+  export AGENTS_READY_VITE_ROUTER
+  export AGENTS_READY_VITE_SERVICE
+  export AGENTS_READY_VITE_HOST
 
-  AGENT_READY_PROJECT_ID="$project_id"
-  AGENT_READY_WORKTREE_ID="$worktree_id"
-  AGENT_READY_RUNTIME="$(state_value_or_default "runtime" "frankenphp")"
-  AGENT_READY_DATABASE_ENGINE="$(state_value_or_default "databaseEngine" "pgsql")"
-  AGENT_READY_HORIZON="$(state_value_or_default "horizon" "false")"
-  AGENT_READY_COMPOSE_PROJECT="$compose_project"
+  AGENTS_READY_PROJECT_ID="$project_id"
+  AGENTS_READY_WORKTREE_ID="$worktree_id"
+  AGENTS_READY_RUNTIME="$(state_value_or_default "runtime" "frankenphp")"
+  AGENTS_READY_DATABASE_ENGINE="$(state_value_or_default "databaseEngine" "pgsql")"
+  AGENTS_READY_HORIZON="$(state_value_or_default "horizon" "false")"
+  AGENTS_READY_COMPOSE_PROJECT="$compose_project"
   COMPOSE_PROJECT_NAME="$compose_project"
   unset HORIZON_PREFIX
-  AGENT_READY_APP_ROUTER="$compose_project"
-  AGENT_READY_APP_SERVICE="$compose_project"
+  AGENTS_READY_APP_ROUTER="$compose_project"
+  AGENTS_READY_APP_SERVICE="$compose_project"
 
   if [[ "$project_id" == "$worktree_id" ]]; then
-    AGENT_READY_APP_HOST="$route_domain"
-    AGENT_READY_VITE_HOST="vite.$route_domain"
+    AGENTS_READY_APP_HOST="$route_domain"
+    AGENTS_READY_VITE_HOST="vite.$route_domain"
   else
-    AGENT_READY_APP_HOST="$worktree_id.$route_domain"
-    AGENT_READY_VITE_HOST="vite-$worktree_id.$route_domain"
+    AGENTS_READY_APP_HOST="$worktree_id.$route_domain"
+    AGENTS_READY_VITE_HOST="vite-$worktree_id.$route_domain"
   fi
 
-  AGENT_READY_VITE_ROUTER="$compose_project-vite"
-  AGENT_READY_VITE_SERVICE="$compose_project-vite"
+  AGENTS_READY_VITE_ROUTER="$compose_project-vite"
+  AGENTS_READY_VITE_SERVICE="$compose_project-vite"
 }
 
 compose_run() {
@@ -232,12 +232,12 @@ discover_companion_home() {
   local root
   local sibling
 
-  if [[ -f .agent-ready/config.json ]] && configured_companion_home .agent-ready/config.json "$key"; then
+  if [[ -f .agents-ready/config.json ]] && configured_companion_home .agents-ready/config.json "$key"; then
     return 0
   fi
 
   main="$(main_worktree)"
-  if [[ -n "$main" && "$main" != "$(current_root)" && -f "$main/.agent-ready/config.json" ]] && configured_companion_home "$main/.agent-ready/config.json" "$key"; then
+  if [[ -n "$main" && "$main" != "$(current_root)" && -f "$main/.agents-ready/config.json" ]] && configured_companion_home "$main/.agents-ready/config.json" "$key"; then
     return 0
   fi
 
@@ -287,7 +287,7 @@ ensure_shared_services() {
 
   load_worktree_env
   services_dir="$(services_home)" || return $?
-  "$services_dir/bin/ensure" --database="$AGENT_READY_DATABASE_ENGINE" --cache=valkey
+  "$services_dir/bin/ensure" --database="$AGENTS_READY_DATABASE_ENGINE" --cache=valkey
 }
 
 provision_shared_databases() {
@@ -296,9 +296,9 @@ provision_shared_databases() {
   load_worktree_env
   services_dir="$(services_home)" || return $?
   "$services_dir/bin/provision-checkout" \
-    --project-id="$AGENT_READY_PROJECT_ID" \
-    --worktree-id="$AGENT_READY_WORKTREE_ID" \
-    --database="$AGENT_READY_DATABASE_ENGINE" \
+    --project-id="$AGENTS_READY_PROJECT_ID" \
+    --worktree-id="$AGENTS_READY_WORKTREE_ID" \
+    --database="$AGENTS_READY_DATABASE_ENGINE" \
     --root="$(current_root)"
 }
 
@@ -308,9 +308,9 @@ derive_shared_checkout_env() {
   load_worktree_env
   services_dir="$(services_home)" || return $?
   "$services_dir/bin/derive-checkout" \
-    --project-id="$AGENT_READY_PROJECT_ID" \
-    --worktree-id="$AGENT_READY_WORKTREE_ID" \
-    --database="$AGENT_READY_DATABASE_ENGINE" \
+    --project-id="$AGENTS_READY_PROJECT_ID" \
+    --worktree-id="$AGENTS_READY_WORKTREE_ID" \
+    --database="$AGENTS_READY_DATABASE_ENGINE" \
     --format=env
 }
 
@@ -320,9 +320,9 @@ cleanup_shared_databases() {
   load_worktree_env
   services_dir="$(services_home)" || return $?
   "$services_dir/bin/drop-checkout" \
-    --project-id="$AGENT_READY_PROJECT_ID" \
-    --worktree-id="$AGENT_READY_WORKTREE_ID" \
-    --database="$AGENT_READY_DATABASE_ENGINE"
+    --project-id="$AGENTS_READY_PROJECT_ID" \
+    --worktree-id="$AGENTS_READY_WORKTREE_ID" \
+    --database="$AGENTS_READY_DATABASE_ENGINE"
 }
 
 cleanup_shared_valkey_namespaces() {
@@ -331,8 +331,8 @@ cleanup_shared_valkey_namespaces() {
   load_worktree_env
   services_dir="$(services_home)" || return $?
   "$services_dir/bin/clean-prefix" \
-    --project-id="$AGENT_READY_PROJECT_ID" \
-    --worktree-id="$AGENT_READY_WORKTREE_ID" \
+    --project-id="$AGENTS_READY_PROJECT_ID" \
+    --worktree-id="$AGENTS_READY_WORKTREE_ID" \
     --kind=valkey
 }
 
@@ -342,8 +342,8 @@ cleanup_shared_horizon_namespaces() {
   load_worktree_env
   services_dir="$(services_home)" || return $?
   "$services_dir/bin/clean-prefix" \
-    --project-id="$AGENT_READY_PROJECT_ID" \
-    --worktree-id="$AGENT_READY_WORKTREE_ID" \
+    --project-id="$AGENTS_READY_PROJECT_ID" \
+    --worktree-id="$AGENTS_READY_WORKTREE_ID" \
     --kind=horizon
 }
 
@@ -370,7 +370,7 @@ materialize_runtime_env() {
   local main
 
   load_worktree_env
-  horizon_enabled="$AGENT_READY_HORIZON"
+  horizon_enabled="$AGENTS_READY_HORIZON"
   derived="$(mktemp)"
   derive_shared_checkout_env > "$derived"
   unset HORIZON_PREFIX
@@ -390,7 +390,7 @@ materialize_runtime_env() {
   ensure_env_file ".env" "$main/.env" ".env.example"
   ensure_env_file ".env.testing" "$main/.env.testing" "$main/.env" ".env.testing.example" ".env" ".env.example"
 
-  upsert_env_var ".env" "APP_URL" "https://$AGENT_READY_APP_HOST"
+  upsert_env_var ".env" "APP_URL" "https://$AGENTS_READY_APP_HOST"
   upsert_env_var ".env" "DB_CONNECTION" "$DB_CONNECTION"
   upsert_env_var ".env" "DB_HOST" "$DB_HOST"
   upsert_env_var ".env" "DB_PORT" "$DB_PORT"

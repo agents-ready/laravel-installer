@@ -1,6 +1,6 @@
 # Agent Instructions
 
-This repository implements the Composer dev package for Agent-Ready Laravel.
+This repository implements the Composer dev package for Agents-Ready Laravel.
 
 ## Core Rules
 

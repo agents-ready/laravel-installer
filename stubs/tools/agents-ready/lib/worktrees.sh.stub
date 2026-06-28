@@ -15,7 +15,7 @@ require_git_repo() {
     return 0
   fi
 
-  echo "Agent-Ready worktree lifecycle requires this project to be a Git repository." >&2
+  echo "Agents-Ready worktree lifecycle requires this project to be a Git repository." >&2
   echo "Run git init and commit the generated files before creating managed worktrees." >&2
   exit 1
 }
@@ -26,7 +26,7 @@ worktree_id_exists() {
   local existing
 
   while IFS= read -r path; do
-    existing="$(json_value "$path/.agent-ready/worktree.json" "worktreeId")"
+    existing="$(json_value "$path/.agents-ready/worktree.json" "worktreeId")"
     if [[ "$existing" == "$wanted" ]]; then
       return 0
     fi
@@ -66,7 +66,7 @@ write_worktree_state() {
   local horizon
   local route_domain
 
-  main_state="$main/.agent-ready/worktree.json"
+  main_state="$main/.agents-ready/worktree.json"
   project_id="$(json_value "$main_state" "projectId")"
   [[ -n "$project_id" ]] || project_id="$(project_slug)"
   runtime="$(json_value "$main_state" "runtime")"
@@ -78,8 +78,8 @@ write_worktree_state() {
   route_domain="$(json_value "$main_state" "routeDomain")"
   [[ -n "$route_domain" ]] || route_domain="$project_id.localhost"
 
-  mkdir -p "$target/.agent-ready"
-  cat > "$target/.agent-ready/worktree.json" <<JSON
+  mkdir -p "$target/.agents-ready"
+  cat > "$target/.agents-ready/worktree.json" <<JSON
 {
   "version": 1,
   "root": "$(json_escape "$target")",
@@ -125,7 +125,7 @@ write_worktrees_index() {
 
   require_git_repo
   main="$(main_worktree)"
-  mkdir -p "$main/.agent-ready"
+  mkdir -p "$main/.agents-ready"
   tmp="$(mktemp)"
 
   {
@@ -134,7 +134,7 @@ write_worktrees_index() {
     printf '  "worktrees": [\n'
 
     while IFS= read -r path; do
-      state="$path/.agent-ready/worktree.json"
+      state="$path/.agents-ready/worktree.json"
       [[ -f "$state" ]] || continue
 
       id="$(json_value "$state" "worktreeId")"
@@ -175,7 +175,7 @@ list_worktrees() {
   printf '%-24s %-28s %-42s %s\n' "ID" "BRANCH" "APP HOST" "PATH"
 
   while IFS= read -r path; do
-    state="$path/.agent-ready/worktree.json"
+    state="$path/.agents-ready/worktree.json"
     [[ -f "$state" ]] || continue
 
     id="$(json_value "$state" "worktreeId")"
@@ -215,7 +215,7 @@ resolve_existing_worktree() {
   fi
 
   while IFS= read -r path; do
-    state="$path/.agent-ready/worktree.json"
+    state="$path/.agents-ready/worktree.json"
     id="$(json_value "$state" "worktreeId")"
     if [[ "$id" == "$spec" ]]; then
       printf '%s\n' "$path"
@@ -232,7 +232,7 @@ ensure_clean_or_forced() {
   local force="$2"
   local changes
 
-  changes="$(git -C "$target" status --porcelain --untracked-files=all | awk '{ path = substr($0, 4); if (path != ".agent-ready/worktree.json" && path != ".agent-ready/worktrees.json") print }')"
+  changes="$(git -C "$target" status --porcelain --untracked-files=all | awk '{ path = substr($0, 4); if (path != ".agents-ready/worktree.json" && path != ".agents-ready/worktrees.json") print }')"
   if [[ -z "$changes" || "$force" == "true" ]]; then
     return 0
   fi
@@ -245,13 +245,13 @@ ensure_clean_or_forced() {
 ensure_owned_worktree() {
   local target="$1"
   local main="$2"
-  local state="$target/.agent-ready/worktree.json"
+  local state="$target/.agents-ready/worktree.json"
   local owner
   local id
 
   if [[ ! -f "$state" ]]; then
     echo "Refusing to remove an unmanaged directory: $target" >&2
-    echo "Expected Agent-Ready state at $state." >&2
+    echo "Expected Agents-Ready state at $state." >&2
     exit 1
   fi
 
@@ -364,7 +364,7 @@ create_worktree() {
 
   if [[ ! -x "$target/local" ]]; then
     echo "The new worktree does not contain ./local." >&2
-    echo "Commit the Agent-Ready generated files before creating managed worktrees." >&2
+    echo "Commit the Agents-Ready generated files before creating managed worktrees." >&2
     rollback_created_worktree "$main" "$target" "$branch"
     exit 1
   fi

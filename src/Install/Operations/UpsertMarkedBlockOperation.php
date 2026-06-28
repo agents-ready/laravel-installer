@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace EdgarSedov\AgentReadyInstaller\Install\Operations;
+namespace AgentsReady\LaravelInstaller\Install\Operations;
 
 final readonly class UpsertMarkedBlockOperation implements InstallOperation
 {

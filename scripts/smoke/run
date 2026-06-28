@@ -4,24 +4,24 @@ set -euo pipefail
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 package_root_default="$(cd "$script_dir/../.." && pwd -P)"
 
-PACKAGE_ROOT="${AGENT_READY_SMOKE_PACKAGE_ROOT:-$package_root_default}"
-SMOKE_ROOT="${AGENT_READY_SMOKE_ROOT:-/tmp/opencode/agent-ready-installer-smoke}"
-PROFILE="${AGENT_READY_SMOKE_PROFILE:-full}"
-RUNTIME="${AGENT_READY_SMOKE_RUNTIME:-frankenphp}"
-DATABASE="${AGENT_READY_SMOKE_DATABASE:-pgsql}"
-HORIZON="${AGENT_READY_SMOKE_HORIZON:-0}"
-KEEP="${AGENT_READY_SMOKE_KEEP:-failure}"
-TOOL_MODE="${AGENT_READY_SMOKE_TOOL_MODE:-docker}"
-RUN_ID="${AGENT_READY_SMOKE_RUN_ID:-}"
-LARAVEL_VERSION="${AGENT_READY_SMOKE_LARAVEL_VERSION:-^13.0}"
-PHP_VERSION="${AGENT_READY_SMOKE_PHP_VERSION:-8.4}"
-COMPOSER_VERSION="${AGENT_READY_SMOKE_COMPOSER_VERSION:-2.9.2}"
-PACKAGE_CONSTRAINT="${AGENT_READY_SMOKE_PACKAGE_CONSTRAINT:-@dev}"
-HTTP_RETRIES="${AGENT_READY_SMOKE_HTTP_RETRIES:-30}"
-HTTP_RETRY_DELAY="${AGENT_READY_SMOKE_HTTP_RETRY_DELAY:-2}"
+PACKAGE_ROOT="${AGENTS_READY_SMOKE_PACKAGE_ROOT:-$package_root_default}"
+SMOKE_ROOT="${AGENTS_READY_SMOKE_ROOT:-/tmp/opencode/agents-ready-installer-smoke}"
+PROFILE="${AGENTS_READY_SMOKE_PROFILE:-full}"
+RUNTIME="${AGENTS_READY_SMOKE_RUNTIME:-frankenphp}"
+DATABASE="${AGENTS_READY_SMOKE_DATABASE:-pgsql}"
+HORIZON="${AGENTS_READY_SMOKE_HORIZON:-0}"
+KEEP="${AGENTS_READY_SMOKE_KEEP:-failure}"
+TOOL_MODE="${AGENTS_READY_SMOKE_TOOL_MODE:-docker}"
+RUN_ID="${AGENTS_READY_SMOKE_RUN_ID:-}"
+LARAVEL_VERSION="${AGENTS_READY_SMOKE_LARAVEL_VERSION:-^13.0}"
+PHP_VERSION="${AGENTS_READY_SMOKE_PHP_VERSION:-8.4}"
+COMPOSER_VERSION="${AGENTS_READY_SMOKE_COMPOSER_VERSION:-2.9.2}"
+PACKAGE_CONSTRAINT="${AGENTS_READY_SMOKE_PACKAGE_CONSTRAINT:-@dev}"
+HTTP_RETRIES="${AGENTS_READY_SMOKE_HTTP_RETRIES:-30}"
+HTTP_RETRY_DELAY="${AGENTS_READY_SMOKE_HTTP_RETRY_DELAY:-2}"
 
-TRAEFIK_HOME="${AGENT_READY_SMOKE_TRAEFIK_HOME:-}"
-SERVICES_HOME="${AGENT_READY_SMOKE_SERVICES_HOME:-}"
+TRAEFIK_HOME="${AGENTS_READY_SMOKE_TRAEFIK_HOME:-}"
+SERVICES_HOME="${AGENTS_READY_SMOKE_SERVICES_HOME:-}"
 
 usage() {
   cat >&2 <<'USAGE'
@@ -39,7 +39,7 @@ Options:
   --traefik-home <path>
   --services-home <path>
 
-Environment mirrors the AGENT_READY_SMOKE_* variables documented in docs/plans/long-term-smoke-strategy.md.
+Environment mirrors the AGENTS_READY_SMOKE_* variables documented in docs/plans/long-term-smoke-strategy.md.
 USAGE
 }
 
@@ -181,10 +181,10 @@ WORKTREE_BRANCH="smoke/$RUN_ID"
 RUN_ROOT="$SMOKE_ROOT/$RUN_ID"
 APP_DIR="$RUN_ROOT/$APP_SLUG"
 WORKTREE_DIR="$RUN_ROOT/worktrees/$WORKTREE_ID"
-ARTIFACTS="${AGENT_READY_SMOKE_ARTIFACTS:-$RUN_ROOT/artifacts}"
+ARTIFACTS="${AGENTS_READY_SMOKE_ARTIFACTS:-$RUN_ROOT/artifacts}"
 COMMAND_LOG_DIR="$ARTIFACTS/commands"
-COMPOSER_CACHE_DIR="${AGENT_READY_SMOKE_COMPOSER_CACHE:-$SMOKE_ROOT/.cache/composer}"
-RUNNER_IMAGE="agent-ready-installer-smoke-runner:${PHP_VERSION}-${COMPOSER_VERSION}"
+COMPOSER_CACHE_DIR="${AGENTS_READY_SMOKE_COMPOSER_CACHE:-$SMOKE_ROOT/.cache/composer}"
+RUNNER_IMAGE="agents-ready-installer-smoke-runner:${PHP_VERSION}-${COMPOSER_VERSION}"
 PACKAGE_NAME="agents-ready/laravel-installer"
 STEP=0
 APP_CREATED=false
@@ -235,7 +235,7 @@ preflight_companions() {
 
 preflight_package_root() {
   [[ -f "$PACKAGE_ROOT/composer.json" ]] || fail "Package root does not contain composer.json: $PACKAGE_ROOT"
-  [[ -f "$PACKAGE_ROOT/src/Console/InstallCommand.php" ]] || fail "Package root does not look like agent-ready-installer: $PACKAGE_ROOT"
+  [[ -f "$PACKAGE_ROOT/src/Console/InstallCommand.php" ]] || fail "Package root does not look like agents-ready-installer: $PACKAGE_ROOT"
   [[ -f "$PACKAGE_ROOT/docker/smoke-runner/Dockerfile" ]] || fail "Smoke runner Dockerfile is missing."
 }
 
@@ -271,7 +271,7 @@ host_path_to_runner_path() {
   case "$path" in
     "$RUN_ROOT") printf '/workspace\n' ;;
     "$RUN_ROOT"/*) printf '/workspace/%s\n' "${path#"$RUN_ROOT"/}" ;;
-    "$PACKAGE_ROOT") printf '/agent-ready-installer\n' ;;
+    "$PACKAGE_ROOT") printf '/agents-ready-installer\n' ;;
     *) fail "Cannot map host path into smoke runner: $path" ;;
   esac
 }
@@ -289,7 +289,7 @@ runner_exec() {
     -e COMPOSER_HOME=/tmp/composer-home \
     -e COMPOSER_CACHE_DIR=/tmp/composer-cache \
     -v "$RUN_ROOT:/workspace" \
-    -v "$PACKAGE_ROOT:/agent-ready-installer:ro" \
+    -v "$PACKAGE_ROOT:/agents-ready-installer:ro" \
     -v "$COMPOSER_CACHE_DIR:/tmp/composer-cache" \
     -w "$container_workdir" \
     "$RUNNER_IMAGE" \
@@ -427,9 +427,9 @@ JSON
   copy_if_exists "$APP_DIR/composer.json" "$ARTIFACTS/app/composer.json"
   copy_if_exists "$APP_DIR/composer.lock" "$ARTIFACTS/app/composer.lock"
   copy_if_exists "$APP_DIR/docker-compose.yml" "$ARTIFACTS/app/docker-compose.yml"
-  copy_if_exists "$APP_DIR/.agent-ready/worktree.json" "$ARTIFACTS/app/worktree.json"
-  copy_if_exists "$APP_DIR/.agent-ready/worktrees.json" "$ARTIFACTS/app/worktrees.json"
-  copy_if_exists "$APP_DIR/.agent-ready/config.json" "$ARTIFACTS/app/config.json"
+  copy_if_exists "$APP_DIR/.agents-ready/worktree.json" "$ARTIFACTS/app/worktree.json"
+  copy_if_exists "$APP_DIR/.agents-ready/worktrees.json" "$ARTIFACTS/app/worktrees.json"
+  copy_if_exists "$APP_DIR/.agents-ready/config.json" "$ARTIFACTS/app/config.json"
   copy_if_exists "$APP_DIR/storage/logs/laravel.log" "$ARTIFACTS/app/storage-logs-laravel.log"
   redact_env_file "$APP_DIR/.env" "$ARTIFACTS/app/env.redacted"
   redact_env_file "$APP_DIR/.env.testing" "$ARTIFACTS/app/env-testing.redacted"
@@ -439,7 +439,7 @@ JSON
     git -C "$APP_DIR" worktree list --porcelain > "$ARTIFACTS/app/git-worktree-list.txt" 2>&1 || true
   fi
 
-  copy_if_exists "$WORKTREE_DIR/.agent-ready/worktree.json" "$ARTIFACTS/worktree/worktree.json"
+  copy_if_exists "$WORKTREE_DIR/.agents-ready/worktree.json" "$ARTIFACTS/worktree/worktree.json"
   copy_if_exists "$WORKTREE_DIR/storage/logs/laravel.log" "$ARTIFACTS/worktree/storage-logs-laravel.log"
   redact_env_file "$WORKTREE_DIR/.env" "$ARTIFACTS/worktree/env.redacted"
   redact_env_file "$WORKTREE_DIR/.env.testing" "$ARTIFACTS/worktree/env-testing.redacted"
@@ -523,27 +523,27 @@ assert_env_var_equals() {
 
 assert_generated_files() {
   assert_executable_file "$APP_DIR/local"
-  assert_file "$APP_DIR/tools/agent-ready/local.sh"
-  assert_file "$APP_DIR/tools/agent-ready/lib/common.sh"
-  assert_file "$APP_DIR/tools/agent-ready/lib/worktrees.sh"
+  assert_file "$APP_DIR/tools/agents-ready/local.sh"
+  assert_file "$APP_DIR/tools/agents-ready/lib/common.sh"
+  assert_file "$APP_DIR/tools/agents-ready/lib/worktrees.sh"
   assert_file "$APP_DIR/docker-compose.yml"
-  assert_file "$APP_DIR/.agent-ready/config.json"
-  assert_file "$APP_DIR/.agent-ready/worktree.json"
-  assert_file "$APP_DIR/.agent-ready/worktrees.json"
+  assert_file "$APP_DIR/.agents-ready/config.json"
+  assert_file "$APP_DIR/.agents-ready/worktree.json"
+  assert_file "$APP_DIR/.agents-ready/worktrees.json"
   assert_file "$APP_DIR/.env.testing.example"
   assert_no_file "$APP_DIR/docker-compose.shared.yml"
-  assert_file_contains "$APP_DIR/.agent-ready/worktree.json" "\"runtime\": \"$RUNTIME\""
-  assert_file_contains "$APP_DIR/.agent-ready/worktree.json" "\"databaseEngine\": \"$DATABASE\""
-  assert_file_contains "$APP_DIR/.agent-ready/worktree.json" "\"routeDomain\": \"$ROUTE_DOMAIN\""
+  assert_file_contains "$APP_DIR/.agents-ready/worktree.json" "\"runtime\": \"$RUNTIME\""
+  assert_file_contains "$APP_DIR/.agents-ready/worktree.json" "\"databaseEngine\": \"$DATABASE\""
+  assert_file_contains "$APP_DIR/.agents-ready/worktree.json" "\"routeDomain\": \"$ROUTE_DOMAIN\""
 
   if [[ "$RUNTIME" == "frankenphp" ]]; then
-    assert_file "$APP_DIR/docker/agent-ready/frankenphp/Dockerfile"
-    assert_file "$APP_DIR/docker/agent-ready/frankenphp/Caddyfile"
-    assert_no_file "$APP_DIR/docker/agent-ready/php-fpm/Dockerfile"
+    assert_file "$APP_DIR/docker/agents-ready/frankenphp/Dockerfile"
+    assert_file "$APP_DIR/docker/agents-ready/frankenphp/Caddyfile"
+    assert_no_file "$APP_DIR/docker/agents-ready/php-fpm/Dockerfile"
   else
-    assert_file "$APP_DIR/docker/agent-ready/php-fpm/Dockerfile"
-    assert_file "$APP_DIR/docker/agent-ready/nginx/default.conf"
-    assert_no_file "$APP_DIR/docker/agent-ready/frankenphp/Dockerfile"
+    assert_file "$APP_DIR/docker/agents-ready/php-fpm/Dockerfile"
+    assert_file "$APP_DIR/docker/agents-ready/nginx/default.conf"
+    assert_no_file "$APP_DIR/docker/agents-ready/frankenphp/Dockerfile"
   fi
 }
 
@@ -637,11 +637,11 @@ ensure_git_baseline() {
     git -C "$APP_DIR" init -b main
   fi
 
-  git -C "$APP_DIR" config user.name "Agent Ready Smoke"
-  git -C "$APP_DIR" config user.email "agent-ready-smoke@example.test"
+  git -C "$APP_DIR" config user.name "Agents Ready Smoke"
+  git -C "$APP_DIR" config user.email "agents-ready-smoke@example.test"
   git -C "$APP_DIR" add -A
   if ! git -C "$APP_DIR" diff --cached --quiet || ! git -C "$APP_DIR" rev-parse --verify HEAD >/dev/null 2>&1; then
-    git -C "$APP_DIR" commit -m "Agent-Ready smoke baseline"
+    git -C "$APP_DIR" commit -m "Agents-Ready smoke baseline"
   fi
 }
 
@@ -656,11 +656,11 @@ configure_path_repository() {
   if [[ "$TOOL_MODE" == "host" ]]; then
     repo_url="$PACKAGE_ROOT"
   else
-    repo_url="/agent-ready-installer"
+    repo_url="/agents-ready-installer"
   fi
 
   repo_json="{\"type\":\"path\",\"url\":\"$(json_escape "$repo_url")\",\"options\":{\"symlink\":false}}"
-  composer_exec "$APP_DIR" config repositories.agent-ready "$repo_json"
+  composer_exec "$APP_DIR" config repositories.agents-ready "$repo_json"
 }
 
 require_package() {
@@ -669,14 +669,14 @@ require_package() {
 
 run_installer() {
   local args=(
-    artisan agent-ready:install
+    artisan agents-ready:install
     --no-interaction
     --host-root="$APP_DIR"
     --traefik-home="$TRAEFIK_HOME"
     --services-home="$SERVICES_HOME"
+    --project-slug="$APP_SLUG"
     --runtime="$RUNTIME"
     --database="$DATABASE"
-    --route-domain="$ROUTE_DOMAIN"
     --local-agent-notes
     --agent-skills
     --decision-notes
@@ -750,7 +750,7 @@ write_cleanup_state
 run_step create-laravel-app create_laravel_app
 run_step composer-path-repository configure_path_repository
 run_step composer-require-package require_package
-run_step agent-ready-install run_installer
+run_step agents-ready-install run_installer
 assert_generated_files
 
 if profile_has_runtime; then

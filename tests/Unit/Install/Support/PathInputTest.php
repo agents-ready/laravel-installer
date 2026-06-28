@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace EdgarSedov\AgentReadyInstaller\Tests\Unit\Install\Support;
+namespace AgentsReady\LaravelInstaller\Tests\Unit\Install\Support;
 
-use EdgarSedov\AgentReadyInstaller\Install\Support\PathInput;
-use EdgarSedov\AgentReadyInstaller\Tests\UnitTestCase;
+use AgentsReady\LaravelInstaller\Install\Support\PathInput;
+use AgentsReady\LaravelInstaller\Tests\UnitTestCase;
 use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\DataProvider;
 
@@ -13,7 +13,7 @@ final class PathInputTest extends UnitTestCase
 {
     public function test_relative_option_normalizes_safe_relative_paths(): void
     {
-        $this->assertSame('tools/agent-ready', PathInput::relativeOption('tools-path', ' tools\\agent-ready/'));
+        $this->assertSame('tools/agents-ready', PathInput::relativeOption('tools-path', ' tools\\agents-ready/'));
     }
 
     #[DataProvider('unsafeRelativePaths')]
@@ -34,9 +34,9 @@ final class PathInputTest extends UnitTestCase
             'empty' => [''],
             'absolute unix path' => ['/tmp/tools'],
             'absolute windows path' => ['C:\\tmp\\tools'],
-            'current directory segment' => ['tools/./agent-ready'],
-            'parent directory segment' => ['tools/../agent-ready'],
-            'empty segment' => ['tools//agent-ready'],
+            'current directory segment' => ['tools/./agents-ready'],
+            'parent directory segment' => ['tools/../agents-ready'],
+            'empty segment' => ['tools//agents-ready'],
         ];
     }
 
@@ -56,6 +56,19 @@ final class PathInputTest extends UnitTestCase
     public function test_domain_option_normalizes_valid_route_domains(): void
     {
         $this->assertSame('nexus.localhost', PathInput::domainOption('route-domain', ' Nexus.Localhost '));
+    }
+
+    public function test_project_slug_option_normalizes_user_input(): void
+    {
+        $this->assertSame('real-app', PathInput::projectSlugOption('project-slug', ' Real App '));
+    }
+
+    public function test_project_slug_option_rejects_empty_normalized_input(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('Option --project-slug must include at least one letter or number after normalization.');
+
+        PathInput::projectSlugOption('project-slug', '!!!');
     }
 
     #[DataProvider('invalidRouteDomains')]

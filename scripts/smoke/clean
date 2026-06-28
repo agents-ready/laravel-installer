@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SMOKE_ROOT="${AGENT_READY_SMOKE_ROOT:-/tmp/opencode/agent-ready-installer-smoke}"
-RUN_DIR="${AGENT_READY_SMOKE_RUN_DIR:-}"
-KEEP="${AGENT_READY_SMOKE_KEEP:-failure}"
+SMOKE_ROOT="${AGENTS_READY_SMOKE_ROOT:-/tmp/opencode/agents-ready-installer-smoke}"
+RUN_DIR="${AGENTS_READY_SMOKE_RUN_DIR:-}"
+KEEP="${AGENTS_READY_SMOKE_KEEP:-failure}"
 STATUS="failure"
 
 usage() {

@@ -1,8 +1,8 @@
 {
   "name": "agents-ready/laravel-installer",
-  "description": "Install Agent-Ready Laravel local-development tooling into Laravel applications.",
+  "description": "Install Agents-Ready Laravel local-development tooling into Laravel applications.",
   "keywords": [
-    "agent-ready",
+    "agents-ready",
     "docker",
     "frankenphp",
     "laravel",
@@ -34,18 +34,18 @@
   },
   "autoload": {
     "psr-4": {
-      "EdgarSedov\\AgentReadyInstaller\\": "src/"
+      "AgentsReady\\LaravelInstaller\\": "src/"
     }
   },
   "autoload-dev": {
     "psr-4": {
-      "EdgarSedov\\AgentReadyInstaller\\Tests\\": "tests/"
+      "AgentsReady\\LaravelInstaller\\Tests\\": "tests/"
     }
   },
   "extra": {
     "laravel": {
       "providers": [
-        "EdgarSedov\\AgentReadyInstaller\\AgentReadyInstallerServiceProvider"
+        "AgentsReady\\LaravelInstaller\\LaravelInstallerServiceProvider"
       ]
     }
   },

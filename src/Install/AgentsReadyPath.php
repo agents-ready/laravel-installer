@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace EdgarSedov\AgentReadyInstaller\Install;
+namespace AgentsReady\LaravelInstaller\Install;
 
-final class AgentReadyPath
+final class AgentsReadyPath
 {
     public const LOCAL = 'local';
 
@@ -34,13 +34,13 @@ final class AgentReadyPath
 
     public const ENV_TESTING_EXAMPLE = '.env.testing.example';
 
-    public const AGENT_READY = '.agent-ready';
+    public const AGENTS_READY = '.agents-ready';
 
-    public const AGENT_READY_CONFIG = '.agent-ready/config.json';
+    public const AGENTS_READY_CONFIG = '.agents-ready/config.json';
 
-    public const AGENT_READY_WORKTREE = '.agent-ready/worktree.json';
+    public const AGENTS_READY_WORKTREE = '.agents-ready/worktree.json';
 
-    public const AGENT_READY_WORKTREES = '.agent-ready/worktrees.json';
+    public const AGENTS_READY_WORKTREES = '.agents-ready/worktrees.json';
 
     public const AI_SKILLS = '.ai/skills';
 

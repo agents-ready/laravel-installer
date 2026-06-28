@@ -2,17 +2,17 @@
 
 declare(strict_types=1);
 
-namespace EdgarSedov\AgentReadyInstaller\Tests\Unit\Install\Detection;
+namespace AgentsReady\LaravelInstaller\Tests\Unit\Install\Detection;
 
-use EdgarSedov\AgentReadyInstaller\Install\Detection\ExistingProjectDetector;
-use EdgarSedov\AgentReadyInstaller\Install\ProjectContext;
-use EdgarSedov\AgentReadyInstaller\Tests\UnitTestCase;
+use AgentsReady\LaravelInstaller\Install\Detection\ExistingProjectDetector;
+use AgentsReady\LaravelInstaller\Install\ProjectContext;
+use AgentsReady\LaravelInstaller\Tests\UnitTestCase;
 
 final class ExistingProjectDetectorTest extends UnitTestCase
 {
     public function test_detects_existing_stack_and_workflow_facts_read_only(): void
     {
-        $root = $this->temporaryDirectory('agent-ready-existing-project-test-');
+        $root = $this->temporaryDirectory('agents-ready-existing-project-test-');
         $composer = $this->laravelComposerJson();
         $composer['require-dev']['laravel/sail'] = '^1.0';
 
@@ -47,14 +47,14 @@ final class ExistingProjectDetectorTest extends UnitTestCase
 
     public function test_detects_docker_compose_yaml_and_override_files(): void
     {
-        $root = $this->temporaryDirectory('agent-ready-existing-project-test-');
+        $root = $this->temporaryDirectory('agents-ready-existing-project-test-');
 
         $this->writeLaravelComposerJson($root);
         file_put_contents($root.'/docker-compose.yaml', "services:\n  app:\n    image: custom\n");
         file_put_contents($root.'/docker-compose.override.yml', "services:\n  app:\n    labels:\n      - traefik.enable=true\n");
         file_put_contents($root.'/docker-compose.override.yaml', "services:\n  worker:\n    image: custom\n");
 
-        $facts = (new ExistingProjectDetector)->detect(ProjectContext::fromPath($root), 'docker/agent-ready');
+        $facts = (new ExistingProjectDetector)->detect(ProjectContext::fromPath($root), 'docker/agents-ready');
 
         $this->assertTrue($facts->shouldStopFreshInstall());
         $this->assertSame([
@@ -67,13 +67,13 @@ final class ExistingProjectDetectorTest extends UnitTestCase
 
     public function test_env_files_are_reported_without_blocking_fresh_installs(): void
     {
-        $root = $this->temporaryDirectory('agent-ready-existing-project-test-');
+        $root = $this->temporaryDirectory('agents-ready-existing-project-test-');
 
         $this->writeLaravelComposerJson($root);
         file_put_contents($root.'/.env', "APP_ENV=local\n");
         file_put_contents($root.'/.env.testing', "APP_ENV=testing\n");
 
-        $facts = (new ExistingProjectDetector)->detect(ProjectContext::fromPath($root), 'docker/agent-ready');
+        $facts = (new ExistingProjectDetector)->detect(ProjectContext::fromPath($root), 'docker/agents-ready');
 
         $this->assertFalse($facts->shouldStopFreshInstall());
         $this->assertTrue($facts->hasAnyFacts());

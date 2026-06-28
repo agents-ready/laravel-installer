@@ -14,11 +14,11 @@ services:
     labels:
       - traefik.enable=true
       - traefik.docker.network=traefik-public
-      - traefik.http.routers.${AGENT_READY_APP_ROUTER:-{{ slug }}}.entrypoints=websecure
-      - traefik.http.routers.${AGENT_READY_APP_ROUTER:-{{ slug }}}.rule=Host(`${AGENT_READY_APP_HOST:-{{ app_host }}}`)
-      - traefik.http.routers.${AGENT_READY_APP_ROUTER:-{{ slug }}}.service=${AGENT_READY_APP_SERVICE:-{{ slug }}}
-      - traefik.http.routers.${AGENT_READY_APP_ROUTER:-{{ slug }}}.tls=true
-      - traefik.http.services.${AGENT_READY_APP_SERVICE:-{{ slug }}}.loadbalancer.server.port=80
+      - traefik.http.routers.${AGENTS_READY_APP_ROUTER:-{{ slug }}}.entrypoints=websecure
+      - traefik.http.routers.${AGENTS_READY_APP_ROUTER:-{{ slug }}}.rule=Host(`${AGENTS_READY_APP_HOST:-{{ app_host }}}`)
+      - traefik.http.routers.${AGENTS_READY_APP_ROUTER:-{{ slug }}}.service=${AGENTS_READY_APP_SERVICE:-{{ slug }}}
+      - traefik.http.routers.${AGENTS_READY_APP_ROUTER:-{{ slug }}}.tls=true
+      - traefik.http.services.${AGENTS_READY_APP_SERVICE:-{{ slug }}}.loadbalancer.server.port=80
 
   vite:
     image: node:24.11.1
@@ -34,11 +34,11 @@ services:
     labels:
       - traefik.enable=true
       - traefik.docker.network=traefik-public
-      - traefik.http.routers.${AGENT_READY_VITE_ROUTER:-{{ slug }}-vite}.entrypoints=websecure
-      - traefik.http.routers.${AGENT_READY_VITE_ROUTER:-{{ slug }}-vite}.rule=Host(`${AGENT_READY_VITE_HOST:-{{ vite_host }}}`)
-      - traefik.http.routers.${AGENT_READY_VITE_ROUTER:-{{ slug }}-vite}.service=${AGENT_READY_VITE_SERVICE:-{{ slug }}-vite}
-      - traefik.http.routers.${AGENT_READY_VITE_ROUTER:-{{ slug }}-vite}.tls=true
-      - traefik.http.services.${AGENT_READY_VITE_SERVICE:-{{ slug }}-vite}.loadbalancer.server.port=5173
+      - traefik.http.routers.${AGENTS_READY_VITE_ROUTER:-{{ slug }}-vite}.entrypoints=websecure
+      - traefik.http.routers.${AGENTS_READY_VITE_ROUTER:-{{ slug }}-vite}.rule=Host(`${AGENTS_READY_VITE_HOST:-{{ vite_host }}}`)
+      - traefik.http.routers.${AGENTS_READY_VITE_ROUTER:-{{ slug }}-vite}.service=${AGENTS_READY_VITE_SERVICE:-{{ slug }}-vite}
+      - traefik.http.routers.${AGENTS_READY_VITE_ROUTER:-{{ slug }}-vite}.tls=true
+      - traefik.http.services.${AGENTS_READY_VITE_SERVICE:-{{ slug }}-vite}.loadbalancer.server.port=5173
 {{ horizon_service }}
 
 networks:

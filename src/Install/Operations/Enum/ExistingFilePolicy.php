@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace EdgarSedov\AgentReadyInstaller\Install\Operations\Enum;
+namespace AgentsReady\LaravelInstaller\Install\Operations\Enum;
 
 enum ExistingFilePolicy
 {

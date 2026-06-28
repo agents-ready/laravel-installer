@@ -2,15 +2,15 @@
 
 declare(strict_types=1);
 
-namespace EdgarSedov\AgentReadyInstaller\Tests\Unit\Install\Plan;
+namespace AgentsReady\LaravelInstaller\Tests\Unit\Install\Plan;
 
-use EdgarSedov\AgentReadyInstaller\Install\Operations\AppendMissingLinesOperation;
-use EdgarSedov\AgentReadyInstaller\Install\Operations\UpsertMarkedBlockOperation;
-use EdgarSedov\AgentReadyInstaller\Install\Operations\WriteFileOperation;
-use EdgarSedov\AgentReadyInstaller\Install\Plan\InstallationPlan;
-use EdgarSedov\AgentReadyInstaller\Install\Plan\InstallPlanApplier;
-use EdgarSedov\AgentReadyInstaller\Install\Support\TextFilePatcher;
-use EdgarSedov\AgentReadyInstaller\Tests\UnitTestCase;
+use AgentsReady\LaravelInstaller\Install\Operations\AppendMissingLinesOperation;
+use AgentsReady\LaravelInstaller\Install\Operations\UpsertMarkedBlockOperation;
+use AgentsReady\LaravelInstaller\Install\Operations\WriteFileOperation;
+use AgentsReady\LaravelInstaller\Install\Plan\InstallationPlan;
+use AgentsReady\LaravelInstaller\Install\Plan\InstallPlanApplier;
+use AgentsReady\LaravelInstaller\Install\Support\TextFilePatcher;
+use AgentsReady\LaravelInstaller\Tests\UnitTestCase;
 
 final class InstallPlanApplierTest extends UnitTestCase
 {
@@ -22,7 +22,7 @@ final class InstallPlanApplierTest extends UnitTestCase
         $plan = new InstallationPlan([
             WriteFileOperation::conflictIfDifferent('local', "#!/usr/bin/env bash\n"),
             WriteFileOperation::conflictIfDifferent('docker-compose.yml', "services: {}\n"),
-            WriteFileOperation::createIfMissing('.agent-ready/worktree.json', "{}\n"),
+            WriteFileOperation::createIfMissing('.agents-ready/worktree.json', "{}\n"),
             new UpsertMarkedBlockOperation('AGENTS.md', '<!-- start -->', '<!-- end -->', 'Managed'),
         ]);
 
@@ -34,7 +34,7 @@ final class InstallPlanApplierTest extends UnitTestCase
         $this->assertSame([], $result->initializedPaths);
         $this->assertSame([], $result->updatedPaths);
         $this->assertFileDoesNotExist($root.'/local');
-        $this->assertFileDoesNotExist($root.'/.agent-ready/worktree.json');
+        $this->assertFileDoesNotExist($root.'/.agents-ready/worktree.json');
         $this->assertFileDoesNotExist($root.'/AGENTS.md');
         $this->assertSame("services:\n  app:\n    image: custom\n", file_get_contents($root.'/docker-compose.yml'));
     }
@@ -46,7 +46,7 @@ final class InstallPlanApplierTest extends UnitTestCase
 
         $plan = new InstallationPlan([
             WriteFileOperation::conflictIfDifferent('local', "#!/usr/bin/env bash\n"),
-            WriteFileOperation::createIfMissing('.agent-ready/worktree.json', "{}\n"),
+            WriteFileOperation::createIfMissing('.agents-ready/worktree.json', "{}\n"),
             new UpsertMarkedBlockOperation('AGENTS.md', '<!-- start -->', '<!-- end -->', 'Managed'),
         ]);
 
@@ -58,7 +58,7 @@ final class InstallPlanApplierTest extends UnitTestCase
         $this->assertSame([], $result->initializedPaths);
         $this->assertSame([], $result->updatedPaths);
         $this->assertFileDoesNotExist($root.'/local');
-        $this->assertFileDoesNotExist($root.'/.agent-ready/worktree.json');
+        $this->assertFileDoesNotExist($root.'/.agents-ready/worktree.json');
         $this->assertSame("Before\n<!-- start -->\nOld\n", file_get_contents($root.'/AGENTS.md'));
     }
 
@@ -105,21 +105,21 @@ final class InstallPlanApplierTest extends UnitTestCase
 
         $plan = new InstallationPlan([
             WriteFileOperation::conflictIfDifferent('local', "#!/usr/bin/env bash\n", 0755),
-            WriteFileOperation::createIfMissing('.agent-ready/worktree.json', "{}\n"),
+            WriteFileOperation::createIfMissing('.agents-ready/worktree.json', "{}\n"),
             new UpsertMarkedBlockOperation('AGENTS.md', '<!-- start -->', '<!-- end -->', 'Managed'),
-            new AppendMissingLinesOperation('.gitignore', ['/vendor', '/.agent-ready/']),
+            new AppendMissingLinesOperation('.gitignore', ['/vendor', '/.agents-ready/']),
         ]);
 
         $result = (new InstallPlanApplier(new TextFilePatcher))->apply($root, $plan);
 
         $this->assertTrue($result->successful());
         $this->assertSame(['local'], $result->writtenPaths);
-        $this->assertSame(['.agent-ready/worktree.json'], $result->initializedPaths);
+        $this->assertSame(['.agents-ready/worktree.json'], $result->initializedPaths);
         $this->assertSame(['AGENTS.md', '.gitignore'], $result->updatedPaths);
         $this->assertFileExists($root.'/local');
-        $this->assertFileExists($root.'/.agent-ready/worktree.json');
+        $this->assertFileExists($root.'/.agents-ready/worktree.json');
         $this->assertStringContainsString('Managed', (string) file_get_contents($root.'/AGENTS.md'));
-        $this->assertStringContainsString('/.agent-ready/', (string) file_get_contents($root.'/.gitignore'));
+        $this->assertStringContainsString('/.agents-ready/', (string) file_get_contents($root.'/.gitignore'));
     }
 
     public function test_create_if_missing_file_operations_preserve_existing_local_state(): void
@@ -140,6 +140,6 @@ final class InstallPlanApplierTest extends UnitTestCase
 
     private function makeProjectRoot(): string
     {
-        return $this->temporaryDirectory('agent-ready-installer-test-');
+        return $this->temporaryDirectory('agents-ready-installer-test-');
     }
 }

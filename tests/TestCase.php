@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace EdgarSedov\AgentReadyInstaller\Tests;
+namespace AgentsReady\LaravelInstaller\Tests;
 
-use EdgarSedov\AgentReadyInstaller\AgentReadyInstallerServiceProvider;
-use EdgarSedov\AgentReadyInstaller\Tests\Support\UsesTemporaryPaths;
-use EdgarSedov\AgentReadyInstaller\Tests\Support\WritesLaravelComposerJson;
+use AgentsReady\LaravelInstaller\LaravelInstallerServiceProvider;
+use AgentsReady\LaravelInstaller\Tests\Support\UsesTemporaryPaths;
+use AgentsReady\LaravelInstaller\Tests\Support\WritesLaravelComposerJson;
 use Orchestra\Testbench\TestCase as Orchestra;
 
 abstract class TestCase extends Orchestra
@@ -27,7 +27,7 @@ abstract class TestCase extends Orchestra
     protected function getPackageProviders($app): array
     {
         return [
-            AgentReadyInstallerServiceProvider::class,
+            LaravelInstallerServiceProvider::class,
         ];
     }
 }

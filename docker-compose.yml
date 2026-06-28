@@ -6,7 +6,7 @@ services:
       args:
         COMPOSER_VERSION: "${COMPOSER_VERSION:-2.9.2}"
         PHP_VERSION: "${PHP_VERSION:-8.5.1}"
-    image: agent-ready-installer-tools:${PHP_VERSION:-8.5.1}
+    image: agents-ready-installer-tools:${PHP_VERSION:-8.5.1}
     working_dir: /app
     user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
     environment:

@@ -2,16 +2,16 @@
 
 declare(strict_types=1);
 
-namespace EdgarSedov\AgentReadyInstaller\Install\Detection;
+namespace AgentsReady\LaravelInstaller\Install\Detection;
 
-use EdgarSedov\AgentReadyInstaller\Install\AgentReadyPath;
-use EdgarSedov\AgentReadyInstaller\Install\ProjectContext;
+use AgentsReady\LaravelInstaller\Install\AgentsReadyPath;
+use AgentsReady\LaravelInstaller\Install\ProjectContext;
 
 final class ExistingProjectDetector
 {
     /** @var array<int, string> */
     private const COMPOSE_FILES = [
-        AgentReadyPath::COMPOSE,
+        AgentsReadyPath::COMPOSE,
         'docker-compose.yaml',
         'docker-compose.override.yml',
         'docker-compose.override.yaml',
@@ -28,10 +28,10 @@ final class ExistingProjectDetector
         return new ExistingProjectFacts(
             composeFiles: $composeFiles,
             sailIndicators: $sailIndicators,
-            hasLocalEntrypoint: $this->pathExists($context->root, AgentReadyPath::LOCAL),
+            hasLocalEntrypoint: $this->pathExists($context->root, AgentsReadyPath::LOCAL),
             dockerSupportPaths: $this->dockerSupportPaths($context->root, $dockerPath),
             hasTraefikConfiguration: $this->hasTraefikConfiguration($composeText),
-            envFiles: $this->existingPaths($context->root, [AgentReadyPath::ENV, AgentReadyPath::ENV_TESTING]),
+            envFiles: $this->existingPaths($context->root, [AgentsReadyPath::ENV, AgentsReadyPath::ENV_TESTING]),
         );
     }
 

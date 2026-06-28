@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace EdgarSedov\AgentReadyInstaller\Install\Plan;
+namespace AgentsReady\LaravelInstaller\Install\Plan;
 
 final readonly class InstallResult
 {

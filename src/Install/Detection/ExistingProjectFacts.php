@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace EdgarSedov\AgentReadyInstaller\Install\Detection;
+namespace AgentsReady\LaravelInstaller\Install\Detection;
 
 final readonly class ExistingProjectFacts
 {

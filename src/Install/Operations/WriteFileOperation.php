@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace EdgarSedov\AgentReadyInstaller\Install\Operations;
+namespace AgentsReady\LaravelInstaller\Install\Operations;
 
-use EdgarSedov\AgentReadyInstaller\Install\Operations\Enum\ExistingFilePolicy;
+use AgentsReady\LaravelInstaller\Install\Operations\Enum\ExistingFilePolicy;
 
 final readonly class WriteFileOperation implements InstallOperation
 {

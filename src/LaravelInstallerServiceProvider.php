@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace EdgarSedov\AgentReadyInstaller;
+namespace AgentsReady\LaravelInstaller;
 
-use EdgarSedov\AgentReadyInstaller\Console\InstallCommand;
+use AgentsReady\LaravelInstaller\Console\InstallCommand;
 use Illuminate\Support\ServiceProvider;
 
-final class AgentReadyInstallerServiceProvider extends ServiceProvider
+final class LaravelInstallerServiceProvider extends ServiceProvider
 {
     public function boot(): void
     {

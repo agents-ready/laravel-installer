@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace EdgarSedov\AgentReadyInstaller\Tests\Feature;
+namespace AgentsReady\LaravelInstaller\Tests\Feature;
 
-use EdgarSedov\AgentReadyInstaller\Install\InstallOptions;
-use EdgarSedov\AgentReadyInstaller\Install\InstallPlanner;
-use EdgarSedov\AgentReadyInstaller\Install\Plan\InstallPlanApplier;
-use EdgarSedov\AgentReadyInstaller\Install\ProjectContext;
-use EdgarSedov\AgentReadyInstaller\Install\Support\TextFilePatcher;
-use EdgarSedov\AgentReadyInstaller\Tests\UnitTestCase;
+use AgentsReady\LaravelInstaller\Install\InstallOptions;
+use AgentsReady\LaravelInstaller\Install\InstallPlanner;
+use AgentsReady\LaravelInstaller\Install\Plan\InstallPlanApplier;
+use AgentsReady\LaravelInstaller\Install\ProjectContext;
+use AgentsReady\LaravelInstaller\Install\Support\TextFilePatcher;
+use AgentsReady\LaravelInstaller\Tests\UnitTestCase;
 use Symfony\Component\Process\Process;
 
 final class GeneratedWorktreeLifecycleTest extends UnitTestCase
@@ -18,22 +18,22 @@ final class GeneratedWorktreeLifecycleTest extends UnitTestCase
     {
         $root = $this->makeGeneratedProject();
 
-        $indexBefore = (string) file_get_contents($root.'/.agent-ready/worktrees.json');
+        $indexBefore = (string) file_get_contents($root.'/.agents-ready/worktrees.json');
         $output = $this->runFailingIn($root, ['./local', 'worktree', 'list']);
 
         $this->assertStringContainsString('requires this project to be a Git repository', $output);
         $this->assertStringNotContainsString('awk:', $output);
-        $this->assertSame($indexBefore, (string) file_get_contents($root.'/.agent-ready/worktrees.json'));
+        $this->assertSame($indexBefore, (string) file_get_contents($root.'/.agents-ready/worktrees.json'));
     }
 
     public function test_create_list_and_remove_lifecycle_without_starting_docker(): void
     {
         $root = $this->makeCommittedGeneratedProject();
-        $target = $this->temporaryPath('agent-ready-generated-worktree-');
+        $target = $this->temporaryPath('agents-ready-generated-worktree-');
 
         $this->runIn($root, ['./local', 'worktree', 'create', $target, '--branch', 'feature/generated', '--id', 'generated']);
 
-        $state = json_decode((string) file_get_contents($target.'/.agent-ready/worktree.json'), true, 512, JSON_THROW_ON_ERROR);
+        $state = json_decode((string) file_get_contents($target.'/.agents-ready/worktree.json'), true, 512, JSON_THROW_ON_ERROR);
         $this->assertSame('generated', $state['worktreeId']);
         $this->assertSame($root, $state['mainWorktree']);
         $this->assertSame('fresh-laravel-app', $state['projectId']);
@@ -46,7 +46,7 @@ final class GeneratedWorktreeLifecycleTest extends UnitTestCase
         $this->assertFileDoesNotExist($target.'/.env');
         $this->assertFileIsReadable($target.'/.agents/skills/bootstrap-current-checkout/SKILL.md');
 
-        $indexAfterCreate = json_decode((string) file_get_contents($root.'/.agent-ready/worktrees.json'), true, 512, JSON_THROW_ON_ERROR);
+        $indexAfterCreate = json_decode((string) file_get_contents($root.'/.agents-ready/worktrees.json'), true, 512, JSON_THROW_ON_ERROR);
 
         $this->assertCount(2, $indexAfterCreate['worktrees']);
         $this->assertSame(['fresh-laravel-app', 'generated'], array_column($indexAfterCreate['worktrees'], 'id'));
@@ -63,7 +63,7 @@ final class GeneratedWorktreeLifecycleTest extends UnitTestCase
 
         $this->assertDirectoryDoesNotExist($target);
 
-        $index = json_decode((string) file_get_contents($root.'/.agent-ready/worktrees.json'), true, 512, JSON_THROW_ON_ERROR);
+        $index = json_decode((string) file_get_contents($root.'/.agents-ready/worktrees.json'), true, 512, JSON_THROW_ON_ERROR);
         $this->assertCount(1, $index['worktrees']);
         $this->assertSame('fresh-laravel-app', $index['worktrees'][0]['id']);
     }
@@ -71,11 +71,11 @@ final class GeneratedWorktreeLifecycleTest extends UnitTestCase
     public function test_worktree_create_inherits_runtime_database_and_horizon_from_main_state(): void
     {
         $root = $this->makeCommittedGeneratedProject(runtime: 'nginx-php-fpm', databaseEngine: 'mysql', horizon: true);
-        $target = $this->temporaryPath('agent-ready-generated-worktree-');
+        $target = $this->temporaryPath('agents-ready-generated-worktree-');
 
         $this->runIn($root, ['./local', 'worktree', 'create', $target, '--branch', 'feature/inherit-runtime', '--id', 'runtime-child']);
 
-        $state = json_decode((string) file_get_contents($target.'/.agent-ready/worktree.json'), true, 512, JSON_THROW_ON_ERROR);
+        $state = json_decode((string) file_get_contents($target.'/.agents-ready/worktree.json'), true, 512, JSON_THROW_ON_ERROR);
 
         $this->assertSame('nginx-php-fpm', $state['runtime']);
         $this->assertSame('mysql', $state['databaseEngine']);
@@ -85,17 +85,17 @@ final class GeneratedWorktreeLifecycleTest extends UnitTestCase
     public function test_worktree_hosts_derive_from_custom_route_domain(): void
     {
         $root = $this->makeCommittedGeneratedProject(routeDomain: 'project.localhost');
-        $target = $this->temporaryPath('agent-ready-generated-worktree-');
+        $target = $this->temporaryPath('agents-ready-generated-worktree-');
 
         $this->runIn($root, ['./local', 'worktree', 'create', $target, '--branch', 'feature/custom-host', '--id', 'custom']);
 
-        $state = json_decode((string) file_get_contents($target.'/.agent-ready/worktree.json'), true, 512, JSON_THROW_ON_ERROR);
+        $state = json_decode((string) file_get_contents($target.'/.agents-ready/worktree.json'), true, 512, JSON_THROW_ON_ERROR);
 
         $this->assertSame('project.localhost', $state['routeDomain']);
         $this->assertArrayNotHasKey('appHost', $state);
         $this->assertArrayNotHasKey('viteHost', $state);
 
-        $index = json_decode((string) file_get_contents($root.'/.agent-ready/worktrees.json'), true, 512, JSON_THROW_ON_ERROR);
+        $index = json_decode((string) file_get_contents($root.'/.agents-ready/worktrees.json'), true, 512, JSON_THROW_ON_ERROR);
 
         $this->assertSame('custom.project.localhost', $index['worktrees'][1]['appHost']);
     }
@@ -103,15 +103,15 @@ final class GeneratedWorktreeLifecycleTest extends UnitTestCase
     public function test_local_up_delegates_to_shared_services_and_materializes_env_without_identity_keys(): void
     {
         $root = $this->makeGeneratedProject();
-        $log = $this->temporaryPath('agent-ready-shared-services-log-');
+        $log = $this->temporaryPath('agents-ready-shared-services-log-');
         $traefik = $this->fakeTraefikHome($log);
         $services = $this->fakeServicesHome($log);
         $fakeBin = $this->fakeDockerBin($log);
 
-        if (! is_dir($root.'/.agent-ready')) {
-            mkdir($root.'/.agent-ready', 0777, true);
+        if (! is_dir($root.'/.agents-ready')) {
+            mkdir($root.'/.agents-ready', 0777, true);
         }
-        file_put_contents($root.'/.agent-ready/config.json', json_encode([
+        file_put_contents($root.'/.agents-ready/config.json', json_encode([
             'version' => 1,
             'traefikHome' => $traefik,
             'servicesHome' => $services,
@@ -150,15 +150,15 @@ final class GeneratedWorktreeLifecycleTest extends UnitTestCase
     public function test_local_up_materializes_mysql_env_from_shared_services(): void
     {
         $root = $this->makeGeneratedProject(databaseEngine: 'mysql');
-        $log = $this->temporaryPath('agent-ready-shared-services-log-');
+        $log = $this->temporaryPath('agents-ready-shared-services-log-');
         $traefik = $this->fakeTraefikHome($log);
         $services = $this->fakeServicesHome($log, databaseEngine: 'mysql');
         $fakeBin = $this->fakeDockerBin($log);
 
-        if (! is_dir($root.'/.agent-ready')) {
-            mkdir($root.'/.agent-ready', 0777, true);
+        if (! is_dir($root.'/.agents-ready')) {
+            mkdir($root.'/.agents-ready', 0777, true);
         }
-        file_put_contents($root.'/.agent-ready/config.json', json_encode([
+        file_put_contents($root.'/.agents-ready/config.json', json_encode([
             'version' => 1,
             'traefikHome' => $traefik,
             'servicesHome' => $services,
@@ -187,16 +187,16 @@ final class GeneratedWorktreeLifecycleTest extends UnitTestCase
     public function test_local_up_materializes_horizon_prefix_when_enabled(): void
     {
         $root = $this->makeGeneratedProject(horizon: true);
-        $log = $this->temporaryPath('agent-ready-shared-services-log-');
+        $log = $this->temporaryPath('agents-ready-shared-services-log-');
         $horizonPrefix = 'shared-services:horizon:sentinel:';
         $traefik = $this->fakeTraefikHome($log);
         $services = $this->fakeServicesHome($log, horizonPrefix: $horizonPrefix);
         $fakeBin = $this->fakeDockerBin($log);
 
-        if (! is_dir($root.'/.agent-ready')) {
-            mkdir($root.'/.agent-ready', 0777, true);
+        if (! is_dir($root.'/.agents-ready')) {
+            mkdir($root.'/.agents-ready', 0777, true);
         }
-        file_put_contents($root.'/.agent-ready/config.json', json_encode([
+        file_put_contents($root.'/.agents-ready/config.json', json_encode([
             'version' => 1,
             'traefikHome' => $traefik,
             'servicesHome' => $services,
@@ -215,15 +215,15 @@ final class GeneratedWorktreeLifecycleTest extends UnitTestCase
     public function test_local_up_fails_when_horizon_enabled_and_shared_services_omits_horizon_prefix(): void
     {
         $root = $this->makeGeneratedProject(horizon: true);
-        $log = $this->temporaryPath('agent-ready-shared-services-log-');
+        $log = $this->temporaryPath('agents-ready-shared-services-log-');
         $traefik = $this->fakeTraefikHome($log);
         $services = $this->fakeServicesHome($log, horizonPrefix: null);
         $fakeBin = $this->fakeDockerBin($log);
 
-        if (! is_dir($root.'/.agent-ready')) {
-            mkdir($root.'/.agent-ready', 0777, true);
+        if (! is_dir($root.'/.agents-ready')) {
+            mkdir($root.'/.agents-ready', 0777, true);
         }
-        file_put_contents($root.'/.agent-ready/config.json', json_encode([
+        file_put_contents($root.'/.agents-ready/config.json', json_encode([
             'version' => 1,
             'traefikHome' => $traefik,
             'servicesHome' => $services,
@@ -238,15 +238,15 @@ final class GeneratedWorktreeLifecycleTest extends UnitTestCase
     public function test_worktree_remove_cleans_valkey_namespace_without_horizon_when_disabled(): void
     {
         $root = $this->makeCommittedGeneratedProject();
-        $target = $this->temporaryPath('agent-ready-generated-worktree-');
-        $log = $this->temporaryPath('agent-ready-shared-services-log-');
+        $target = $this->temporaryPath('agents-ready-generated-worktree-');
+        $log = $this->temporaryPath('agents-ready-shared-services-log-');
         $services = $this->fakeServicesHome($log);
         $fakeBin = $this->fakeDockerBin($log);
 
-        if (! is_dir($root.'/.agent-ready')) {
-            mkdir($root.'/.agent-ready', 0777, true);
+        if (! is_dir($root.'/.agents-ready')) {
+            mkdir($root.'/.agents-ready', 0777, true);
         }
-        file_put_contents($root.'/.agent-ready/config.json', json_encode([
+        file_put_contents($root.'/.agents-ready/config.json', json_encode([
             'version' => 1,
             'servicesHome' => $services,
         ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR)."\n");
@@ -264,15 +264,15 @@ final class GeneratedWorktreeLifecycleTest extends UnitTestCase
     public function test_worktree_remove_cleans_horizon_namespace_only_when_horizon_is_enabled(): void
     {
         $root = $this->makeCommittedGeneratedProject(horizon: true);
-        $target = $this->temporaryPath('agent-ready-generated-worktree-');
-        $log = $this->temporaryPath('agent-ready-shared-services-log-');
+        $target = $this->temporaryPath('agents-ready-generated-worktree-');
+        $log = $this->temporaryPath('agents-ready-shared-services-log-');
         $services = $this->fakeServicesHome($log);
         $fakeBin = $this->fakeDockerBin($log);
 
-        if (! is_dir($root.'/.agent-ready')) {
-            mkdir($root.'/.agent-ready', 0777, true);
+        if (! is_dir($root.'/.agents-ready')) {
+            mkdir($root.'/.agents-ready', 0777, true);
         }
-        file_put_contents($root.'/.agent-ready/config.json', json_encode([
+        file_put_contents($root.'/.agents-ready/config.json', json_encode([
             'version' => 1,
             'servicesHome' => $services,
         ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR)."\n");
@@ -290,8 +290,8 @@ final class GeneratedWorktreeLifecycleTest extends UnitTestCase
     public function test_worktree_create_refuses_duplicate_ids(): void
     {
         $root = $this->makeCommittedGeneratedProject();
-        $firstTarget = $this->temporaryPath('agent-ready-generated-worktree-');
-        $secondTarget = $this->temporaryPath('agent-ready-generated-worktree-');
+        $firstTarget = $this->temporaryPath('agents-ready-generated-worktree-');
+        $secondTarget = $this->temporaryPath('agents-ready-generated-worktree-');
 
         $this->runIn($root, ['./local', 'worktree', 'create', $firstTarget, '--branch', 'feature/generated-one', '--id', 'generated']);
         $output = $this->runFailingIn($root, ['./local', 'worktree', 'create', $secondTarget, '--branch', 'feature/generated-two', '--id', 'generated']);
@@ -303,7 +303,7 @@ final class GeneratedWorktreeLifecycleTest extends UnitTestCase
     public function test_worktree_create_refuses_existing_branches(): void
     {
         $root = $this->makeCommittedGeneratedProject();
-        $target = $this->temporaryPath('agent-ready-generated-worktree-');
+        $target = $this->temporaryPath('agents-ready-generated-worktree-');
 
         $this->runIn($root, ['git', 'branch', 'feature/existing']);
         $output = $this->runFailingIn($root, ['./local', 'worktree', 'create', $target, '--branch', 'feature/existing', '--id', 'existing']);
@@ -315,7 +315,7 @@ final class GeneratedWorktreeLifecycleTest extends UnitTestCase
     public function test_worktree_remove_refuses_dirty_worktrees_without_force(): void
     {
         $root = $this->makeCommittedGeneratedProject();
-        $target = $this->temporaryPath('agent-ready-generated-worktree-');
+        $target = $this->temporaryPath('agents-ready-generated-worktree-');
 
         $this->runIn($root, ['./local', 'worktree', 'create', $target, '--branch', 'feature/dirty', '--id', 'dirty']);
         file_put_contents($target.'/dirty.txt', "dirty\n");
@@ -339,7 +339,7 @@ final class GeneratedWorktreeLifecycleTest extends UnitTestCase
     public function test_worktree_remove_refuses_unmanaged_directories(): void
     {
         $root = $this->makeCommittedGeneratedProject();
-        $target = $this->temporaryDirectory('agent-ready-unmanaged-worktree-');
+        $target = $this->temporaryDirectory('agents-ready-unmanaged-worktree-');
 
         $output = $this->runFailingIn($root, ['./local', 'worktree', 'remove', $target, '--force']);
 
@@ -350,16 +350,16 @@ final class GeneratedWorktreeLifecycleTest extends UnitTestCase
     public function test_worktree_create_rolls_back_when_generated_wrapper_is_not_committed_as_executable(): void
     {
         $root = $this->makeCommittedGeneratedProject();
-        $target = $this->temporaryPath('agent-ready-generated-worktree-');
+        $target = $this->temporaryPath('agents-ready-generated-worktree-');
 
         chmod($root.'/local', 0644);
         $this->runIn($root, ['git', 'add', 'local']);
         $this->runIn($root, [
             'git',
             '-c',
-            'user.name=Agent Ready',
+            'user.name=Agents Ready',
             '-c',
-            'user.email=agent-ready@example.test',
+            'user.email=agents-ready@example.test',
             'commit',
             '-m',
             'Make local wrapper non-executable',
@@ -418,12 +418,12 @@ final class GeneratedWorktreeLifecycleTest extends UnitTestCase
         $this->runIn($root, [
             'git',
             '-c',
-            'user.name=Agent Ready',
+            'user.name=Agents Ready',
             '-c',
-            'user.email=agent-ready@example.test',
+            'user.email=agents-ready@example.test',
             'commit',
             '-m',
-            'Initial Agent-Ready files',
+            'Initial Agents-Ready files',
         ]);
 
         return $root;
@@ -443,7 +443,7 @@ final class GeneratedWorktreeLifecycleTest extends UnitTestCase
 
     private function makeProjectRoot(): string
     {
-        $root = $this->temporaryDirectory('agent-ready-installer-test-');
+        $root = $this->temporaryDirectory('agents-ready-installer-test-');
 
         $this->writeLaravelComposerJson($root);
 
@@ -452,7 +452,7 @@ final class GeneratedWorktreeLifecycleTest extends UnitTestCase
 
     private function fakeTraefikHome(string $log): string
     {
-        $root = $this->temporaryDirectory('agent-ready-fake-traefik-');
+        $root = $this->temporaryDirectory('agents-ready-fake-traefik-');
 
         mkdir($root.'/bin', 0777, true);
         file_put_contents($root.'/bin/ensure', "#!/usr/bin/env bash\nprintf 'traefik ensure %s\\n' \"\$*\" >> ".escapeshellarg($log)."\n");
@@ -463,7 +463,7 @@ final class GeneratedWorktreeLifecycleTest extends UnitTestCase
 
     private function fakeServicesHome(string $log, string $databaseEngine = 'pgsql', ?string $horizonPrefix = 'shared-services:horizon:sentinel:'): string
     {
-        $root = $this->temporaryDirectory('agent-ready-fake-services-');
+        $root = $this->temporaryDirectory('agents-ready-fake-services-');
         $dbHost = $databaseEngine === 'mysql' ? 'mysql' : 'postgres';
         $dbPort = $databaseEngine === 'mysql' ? '3306' : '5432';
         $deriveEnvLines = [
@@ -505,7 +505,7 @@ final class GeneratedWorktreeLifecycleTest extends UnitTestCase
 
     private function fakeDockerBin(string $log): string
     {
-        $root = $this->temporaryDirectory('agent-ready-fake-docker-bin-');
+        $root = $this->temporaryDirectory('agents-ready-fake-docker-bin-');
 
         file_put_contents($root.'/docker', "#!/usr/bin/env bash\nprintf 'docker %s\\n' \"\$*\" >> ".escapeshellarg($log)."\nexit 0\n");
         chmod($root.'/docker', 0755);

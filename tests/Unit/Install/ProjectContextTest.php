@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace EdgarSedov\AgentReadyInstaller\Tests\Unit\Install;
+namespace AgentsReady\LaravelInstaller\Tests\Unit\Install;
 
-use EdgarSedov\AgentReadyInstaller\Install\ProjectContext;
-use EdgarSedov\AgentReadyInstaller\Tests\UnitTestCase;
+use AgentsReady\LaravelInstaller\Install\ProjectContext;
+use AgentsReady\LaravelInstaller\Tests\UnitTestCase;
 
 final class ProjectContextTest extends UnitTestCase
 {
@@ -27,6 +27,22 @@ final class ProjectContextTest extends UnitTestCase
         $this->assertSame($expected.'.localhost', $context->defaultRouteDomain());
     }
 
+    public function test_generic_laravel_skeleton_name_uses_host_root_basename_when_available(): void
+    {
+        $context = ProjectContext::fromPath($this->makeProjectRoot('laravel/laravel'));
+
+        $this->assertSame('real-agent-app', $context->slug('/home/example/real-agent-app'));
+        $this->assertSame('real-agent-app.localhost', $context->defaultRouteDomain('/home/example/real-agent-app'));
+    }
+
+    public function test_host_root_does_not_override_named_composer_package_slug(): void
+    {
+        $context = ProjectContext::fromPath($this->makeProjectRoot('accredify/nexus'));
+
+        $this->assertSame('nexus', $context->slug('/home/example/real-agent-app'));
+        $this->assertSame('nexus.localhost', $context->defaultRouteDomain('/home/example/real-agent-app'));
+    }
+
     public function test_slug_is_normalized_for_local_resource_names(): void
     {
         $context = ProjectContext::fromPath($this->makeProjectRoot('Acme/Customer Portal!!!'));
@@ -43,9 +59,14 @@ final class ProjectContextTest extends UnitTestCase
         $this->assertSame('laravel-app.localhost', $context->defaultRouteDomain());
     }
 
+    public function test_normalize_slug_returns_null_for_empty_normalized_input(): void
+    {
+        $this->assertNull(ProjectContext::normalizeSlug('!!!'));
+    }
+
     private function makeProjectRoot(string $composerName): string
     {
-        $root = $this->temporaryDirectory('agent-ready-project-context-test-');
+        $root = $this->temporaryDirectory('agents-ready-project-context-test-');
 
         $this->writeLaravelComposerJson($root, $composerName);
 

@@ -2,18 +2,18 @@
 
 declare(strict_types=1);
 
-namespace EdgarSedov\AgentReadyInstaller\Console;
+namespace AgentsReady\LaravelInstaller\Console;
 
-use EdgarSedov\AgentReadyInstaller\Install\AgentReadyPath;
-use EdgarSedov\AgentReadyInstaller\Install\Detection\ExistingProjectDetector;
-use EdgarSedov\AgentReadyInstaller\Install\Detection\ExistingProjectFacts;
-use EdgarSedov\AgentReadyInstaller\Install\InstallOptions;
-use EdgarSedov\AgentReadyInstaller\Install\InstallPlanner;
-use EdgarSedov\AgentReadyInstaller\Install\Operations\WriteFileOperation;
-use EdgarSedov\AgentReadyInstaller\Install\Plan\InstallationPlan;
-use EdgarSedov\AgentReadyInstaller\Install\Plan\InstallPlanApplier;
-use EdgarSedov\AgentReadyInstaller\Install\ProjectContext;
-use EdgarSedov\AgentReadyInstaller\Install\Support\PathInput;
+use AgentsReady\LaravelInstaller\Install\AgentsReadyPath;
+use AgentsReady\LaravelInstaller\Install\Detection\ExistingProjectDetector;
+use AgentsReady\LaravelInstaller\Install\Detection\ExistingProjectFacts;
+use AgentsReady\LaravelInstaller\Install\InstallOptions;
+use AgentsReady\LaravelInstaller\Install\InstallPlanner;
+use AgentsReady\LaravelInstaller\Install\Operations\WriteFileOperation;
+use AgentsReady\LaravelInstaller\Install\Plan\InstallationPlan;
+use AgentsReady\LaravelInstaller\Install\Plan\InstallPlanApplier;
+use AgentsReady\LaravelInstaller\Install\ProjectContext;
+use AgentsReady\LaravelInstaller\Install\Support\PathInput;
 use FilesystemIterator;
 use Illuminate\Console\Command;
 use InvalidArgumentException;
@@ -24,7 +24,7 @@ use SplFileInfo;
 
 final class InstallCommand extends Command
 {
-    protected $signature = 'agent-ready:install
+    protected $signature = 'agents-ready:install
         {--host-root= : Absolute host path to persist for managed worktree state when running inside Docker}
         {--runtime=frankenphp : Runtime to generate: frankenphp or nginx-php-fpm}
         {--database=pgsql : Database engine to use: pgsql or mysql}
@@ -32,14 +32,15 @@ final class InstallCommand extends Command
         {--decision-notes : Include the optional docs/decision-notes project convention}
         {--local-agent-notes : Include AGENTS.local.example.md and initialize ignored AGENTS.local.md}
         {--agent-skills : Include tracked .ai/skills and ignored activation-folder convention}
-        {--tools-path=tools/agent-ready : Relative path for generated Agent-Ready host scripts}
-        {--docker-path=docker/agent-ready : Relative root path for generated Agent-Ready Docker support files}
-        {--traefik-home= : Absolute host path to shared-traefik; persisted in ignored .agent-ready/config.json}
-        {--services-home= : Absolute host path to shared-services; persisted in ignored .agent-ready/config.json}
+        {--tools-path=tools/agents-ready : Relative path for generated Agents-Ready host scripts}
+        {--docker-path=docker/agents-ready : Relative root path for generated Agents-Ready Docker support files}
+        {--traefik-home= : Absolute host path to shared-traefik; persisted in ignored .agents-ready/config.json}
+        {--services-home= : Absolute host path to shared-services; persisted in ignored .agents-ready/config.json}
+        {--project-slug= : Project slug for local resource identity; defaults from composer.json or host root}
         {--route-domain= : Main checkout route domain; defaults to the project slug plus .localhost}
         {--existing-project-candidates : Generate only safe existing-project companion candidate files}';
 
-    protected $description = 'Install Agent-Ready Laravel local-development tooling';
+    protected $description = 'Install Agents-Ready Laravel local-development tooling';
 
     public function __construct(
         private readonly InstallPlanner $planner,
@@ -54,16 +55,35 @@ final class InstallCommand extends Command
         $context = ProjectContext::fromPath(base_path());
 
         try {
-            $toolsPath = $this->relativePathOption('tools-path', 'tools/agent-ready');
-            $dockerPath = $this->relativePathOption('docker-path', 'docker/agent-ready');
+            $toolsPath = $this->relativePathOption('tools-path', 'tools/agents-ready');
+            $dockerPath = $this->relativePathOption('docker-path', 'docker/agents-ready');
             $hostRoot = $this->hostRootOption();
             $traefikHome = $this->absolutePathOption('traefik-home');
             $servicesHome = $this->absolutePathOption('services-home');
-            $routeDomain = $this->domainOption('route-domain', $context->defaultRouteDomain());
-            $runtime = $this->choiceOption('runtime', InstallOptions::RUNTIMES, InstallOptions::DEFAULT_RUNTIME);
-            $databaseEngine = $this->choiceOption('database', InstallOptions::DATABASE_ENGINES, InstallOptions::DEFAULT_DATABASE_ENGINE);
+            $projectSlug = $this->projectSlugOption();
+            $routeDomain = $this->routeDomainOption();
+            $runtime = $this->choiceOption('runtime', InstallOptions::RUNTIMES);
+            $databaseEngine = $this->choiceOption('database', InstallOptions::DATABASE_ENGINES);
         } catch (InvalidArgumentException $exception) {
             $this->components->error($exception->getMessage());
+
+            return self::FAILURE;
+        }
+
+        if ($hostRoot === null) {
+            $this->components->error('Option --host-root is required. Pass the real host checkout path, especially when installing from Docker.');
+
+            return self::FAILURE;
+        }
+
+        if ($traefikHome === null) {
+            $this->components->error('Option --traefik-home is required. Pass the absolute path to shared-traefik.');
+
+            return self::FAILURE;
+        }
+
+        if ($servicesHome === null) {
+            $this->components->error('Option --services-home is required. Pass the absolute path to shared-services.');
 
             return self::FAILURE;
         }
@@ -73,31 +93,23 @@ final class InstallCommand extends Command
         $agentSkills = (bool) $this->option('agent-skills');
         $horizon = (bool) $this->option('horizon');
         $existingProjectCandidates = (bool) $this->option('existing-project-candidates');
-        $hasDecisionNotes = $this->pathExists($context->root, AgentReadyPath::DECISION_NOTES_README);
-        $hasLocalAgentNotes = $this->pathExists($context->root, AgentReadyPath::AGENTS_LOCAL)
-            || $this->pathExists($context->root, AgentReadyPath::AGENTS_LOCAL_EXAMPLE);
-        $hasAgentSkills = is_dir($context->root.'/'.AgentReadyPath::AI_SKILLS)
-            || $this->pathExists($context->root, AgentReadyPath::AGENTS_SKILLS);
-        $config = $this->agentReadyConfig($context->root);
-        $configuredTraefikHome = $this->configString($config, 'traefikHome');
-        $configuredServicesHome = $this->configString($config, 'servicesHome');
-
+        $hasDecisionNotes = $this->pathExists($context->root, AgentsReadyPath::DECISION_NOTES_README);
+        $hasLocalAgentNotes = $this->pathExists($context->root, AgentsReadyPath::AGENTS_LOCAL)
+            || $this->pathExists($context->root, AgentsReadyPath::AGENTS_LOCAL_EXAMPLE);
+        $hasAgentSkills = is_dir($context->root.'/'.AgentsReadyPath::AI_SKILLS)
+            || $this->pathExists($context->root, AgentsReadyPath::AGENTS_SKILLS);
         if ($this->input->isInteractive()) {
-            $promptForHostRoot = $hostRoot === null;
             $promptForToolsPath = ! $this->optionWasPassed('tools-path');
             $promptForDockerPath = ! $this->optionWasPassed('docker-path');
-            $promptForRouteDomain = ! $this->optionWasPassed('route-domain');
+            $promptForProjectSlug = $projectSlug === null;
+            $promptForRuntime = $runtime === null;
+            $promptForDatabase = $databaseEngine === null;
 
-            if ($promptForHostRoot || $promptForToolsPath || $promptForDockerPath || $promptForRouteDomain) {
-                $this->components->info('Choose where Agent-Ready should store host-side paths and generated files.');
+            if ($promptForToolsPath || $promptForDockerPath || $promptForProjectSlug || $promptForRuntime || $promptForDatabase) {
+                $this->components->info('Choose where Agents-Ready should store host-side paths and generated files.');
             }
 
             try {
-                if ($promptForHostRoot) {
-                    $this->line('Host project root is the real path to this app on your machine. Worktree commands store it for symlinks and cleanup, especially when installing from Docker.');
-                    $hostRoot = PathInput::absoluteOption('host-root', (string) $this->ask('Host project root', $context->root));
-                }
-
                 if ($promptForToolsPath) {
                     $this->line('Host script path is where tracked shell helpers live. The ./local entrypoint delegates to these files.');
                     $toolsPath = PathInput::relativeOption('tools-path', (string) $this->ask('Host script path', $toolsPath));
@@ -108,20 +120,30 @@ final class InstallCommand extends Command
                     $dockerPath = PathInput::relativeOption('docker-path', (string) $this->ask('Docker support root path', $dockerPath));
                 }
 
-                if ($promptForRouteDomain) {
-                    $this->line('Route domain is the main checkout host and worktree namespace, for example nexus.localhost. Worktrees use <id>.'.$routeDomain.'.');
-                    $routeDomain = PathInput::domainOption('route-domain', (string) $this->ask('Route domain', $routeDomain));
+                if ($promptForProjectSlug) {
+                    $defaultProjectSlug = $context->slug($hostRoot);
+                    $this->line('Project slug identifies local resources and defaults the main route to <project-slug>.localhost.');
+                    $projectSlug = PathInput::projectSlugOption('project-slug', (string) $this->ask('Project slug', $defaultProjectSlug));
+                }
+
+                if ($promptForRuntime) {
+                    $runtime = (string) $this->choice('Runtime', InstallOptions::RUNTIMES, InstallOptions::DEFAULT_RUNTIME);
+                }
+
+                if ($promptForDatabase) {
+                    $databaseEngine = (string) $this->choice('Database', InstallOptions::DATABASE_ENGINES, InstallOptions::DEFAULT_DATABASE_ENGINE);
                 }
             } catch (InvalidArgumentException $exception) {
                 $this->components->error($exception->getMessage());
 
                 return self::FAILURE;
             }
-        } elseif ($hostRoot === null) {
-            $this->components->error('Option --host-root is required when running non-interactively.');
-
-            return self::FAILURE;
         }
+
+        $projectSlug ??= $context->slug($hostRoot);
+        $routeDomain ??= $projectSlug.'.localhost';
+        $runtime ??= InstallOptions::DEFAULT_RUNTIME;
+        $databaseEngine ??= InstallOptions::DEFAULT_DATABASE_ENGINE;
 
         $existingProject = $this->existingProjects->detect($context, $dockerPath);
         $preflightOptions = new InstallOptions(
@@ -131,6 +153,7 @@ final class InstallCommand extends Command
             agentSkills: $agentSkills,
             toolsPath: $toolsPath,
             dockerPath: $dockerPath,
+            projectSlug: $projectSlug,
             routeDomain: $routeDomain,
             runtime: $runtime,
             databaseEngine: $databaseEngine,
@@ -145,8 +168,9 @@ final class InstallCommand extends Command
                 agentSkills: $agentSkills,
                 toolsPath: $toolsPath,
                 dockerPath: $dockerPath,
-                traefikHome: $traefikHome ?? $configuredTraefikHome,
-                servicesHome: $servicesHome ?? $configuredServicesHome,
+                traefikHome: $traefikHome,
+                servicesHome: $servicesHome,
+                projectSlug: $projectSlug,
                 routeDomain: $routeDomain,
                 runtime: $runtime,
                 databaseEngine: $databaseEngine,
@@ -161,38 +185,6 @@ final class InstallCommand extends Command
         }
 
         if ($this->input->isInteractive()) {
-            $promptForTraefikHome = $traefikHome === null && $configuredTraefikHome === null;
-            $promptForServicesHome = $servicesHome === null && $configuredServicesHome === null;
-
-            try {
-
-                if ($promptForTraefikHome) {
-                    $this->line('Shared Traefik is required for routed app and Vite access. Pass its path, or keep shared-traefik next to this project so Agent-Ready can discover it.');
-                    $detected = $this->detectedTraefikHome($hostRoot);
-                    $answer = (string) $this->ask('Shared Traefik path', $detected ?? '');
-                    if ($answer === '' && $detected === null) {
-                        throw new InvalidArgumentException('Shared Traefik is required. Pass --traefik-home=/path/to/shared-traefik or keep shared-traefik next to this project.');
-                    }
-
-                    $traefikHome = $answer !== '' ? PathInput::absoluteOption('traefik-home', $answer) : $detected;
-                }
-
-                if ($promptForServicesHome) {
-                    $this->line('Shared services are required for Agent-Ready-managed databases and Valkey. Pass its path, or keep shared-services next to this project so Agent-Ready can discover it.');
-                    $detected = $this->detectedServicesHome($hostRoot);
-                    $answer = (string) $this->ask('Shared services path', $detected ?? '');
-                    if ($answer === '' && $detected === null) {
-                        throw new InvalidArgumentException('Shared services are required. Pass --services-home=/path/to/shared-services or keep shared-services next to this project.');
-                    }
-
-                    $servicesHome = $answer !== '' ? PathInput::absoluteOption('services-home', $answer) : $detected;
-                }
-            } catch (InvalidArgumentException $exception) {
-                $this->components->error($exception->getMessage());
-
-                return self::FAILURE;
-            }
-
             if (! $localAgentNotes && ! $hasLocalAgentNotes) {
                 $this->line('Local agent notes add a tracked AGENTS.local.example.md and ignored AGENTS.local.md for machine-specific notes, secrets references, and personal agent preferences.');
                 $localAgentNotes = $this->confirm('Add local agent notes convention?');
@@ -209,23 +201,6 @@ final class InstallCommand extends Command
             }
         }
 
-        $detectedTraefikHome = $this->detectedTraefikHome($hostRoot);
-        $detectedServicesHome = $this->detectedServicesHome($hostRoot);
-        $resolvedTraefikHome = $traefikHome ?? $configuredTraefikHome ?? $detectedTraefikHome;
-        $resolvedServicesHome = $servicesHome ?? $configuredServicesHome ?? $detectedServicesHome;
-
-        if ($resolvedTraefikHome === null) {
-            $this->components->error('Shared Traefik is required. Pass --traefik-home=/path/to/shared-traefik or keep shared-traefik next to this project.');
-
-            return self::FAILURE;
-        }
-
-        if ($resolvedServicesHome === null) {
-            $this->components->error('Shared services are required. Pass --services-home=/path/to/shared-services or keep shared-services next to this project.');
-
-            return self::FAILURE;
-        }
-
         $options = new InstallOptions(
             hostRoot: $hostRoot,
             decisionNotes: $decisionNotes,
@@ -233,8 +208,9 @@ final class InstallCommand extends Command
             agentSkills: $agentSkills,
             toolsPath: $toolsPath,
             dockerPath: $dockerPath,
-            traefikHome: $resolvedTraefikHome,
-            servicesHome: $resolvedServicesHome,
+            traefikHome: $traefikHome,
+            servicesHome: $servicesHome,
+            projectSlug: $projectSlug,
             routeDomain: $routeDomain,
             runtime: $runtime,
             databaseEngine: $databaseEngine,
@@ -271,7 +247,7 @@ final class InstallCommand extends Command
         }
 
         try {
-            $configUpdated = $this->syncLocalConfig($context->root, $resolvedTraefikHome, $resolvedServicesHome);
+            $configUpdated = $this->syncLocalConfig($context->root, $traefikHome, $servicesHome);
         } catch (RuntimeException $exception) {
             $this->components->error($exception->getMessage());
 
@@ -290,11 +266,11 @@ final class InstallCommand extends Command
             $this->line("Updated {$path}");
         }
 
-        if ($configUpdated && ! in_array(AgentReadyPath::AGENT_READY_CONFIG, $result->initializedPaths, true)) {
-            $this->line('Updated '.AgentReadyPath::AGENT_READY_CONFIG);
+        if ($configUpdated && ! in_array(AgentsReadyPath::AGENTS_READY_CONFIG, $result->initializedPaths, true)) {
+            $this->line('Updated '.AgentsReadyPath::AGENTS_READY_CONFIG);
         }
 
-        if (in_array(AgentReadyPath::ENV_TESTING_EXAMPLE, $result->initializedPaths, true)) {
+        if (in_array(AgentsReadyPath::ENV_TESTING_EXAMPLE, $result->initializedPaths, true)) {
             $this->components->warn('Review .env.testing.example before committing; it was generated from local env files and may contain secrets.');
         }
 
@@ -306,15 +282,7 @@ final class InstallCommand extends Command
             $this->components->info('Optional: rerun with --decision-notes to add lightweight project decision-note guidance.');
         }
 
-        if ($traefikHome === null && $configuredTraefikHome === null && $detectedTraefikHome !== null) {
-            $this->components->info("Using discovered shared Traefik at {$detectedTraefikHome}.");
-        }
-
-        if ($servicesHome === null && $configuredServicesHome === null && $detectedServicesHome !== null) {
-            $this->components->info("Using discovered shared services at {$detectedServicesHome}.");
-        }
-
-        $this->components->info('Inspect tracked changes with git diff, then run ./local up. Local state lives in ignored .agent-ready/.');
+        $this->components->info('Inspect tracked changes with git diff, then run ./local up. Local state lives in ignored .agents-ready/.');
 
         return self::SUCCESS;
     }
@@ -348,10 +316,10 @@ final class InstallCommand extends Command
 
         if (! $result->successful()) {
             $this->components->error('Existing project candidate generation stopped because existing files would be overwritten.');
-            $this->components->info('Agent-Ready did not modify any files.');
+            $this->components->info('Agents-Ready did not modify any files.');
 
-            if (in_array(AgentReadyPath::WORKTREE_COMPOSE, $result->conflictPaths, true)) {
-                $this->components->info('Existing worktree.docker-compose.yml differs from the Agent-Ready candidate. Review, move, or remove it before rerunning.');
+            if (in_array(AgentsReadyPath::WORKTREE_COMPOSE, $result->conflictPaths, true)) {
+                $this->components->info('Existing worktree.docker-compose.yml differs from the Agents-Ready candidate. Review, move, or remove it before rerunning.');
             }
 
             return self::FAILURE;
@@ -374,7 +342,7 @@ final class InstallCommand extends Command
     {
         $this->components->warn('Existing project stack or user-owned workflow files detected.');
         $this->writeExistingProjectFacts($facts);
-        $this->components->info('Agent-Ready stopped before writing generated fresh-install files. User-owned files were left unchanged.');
+        $this->components->info('Agents-Ready stopped before writing generated fresh-install files. User-owned files were left unchanged.');
         $this->components->info('Rerun with --existing-project-candidates to write only worktree.docker-compose.yml for review and manual integration.');
     }
 
@@ -411,7 +379,7 @@ final class InstallCommand extends Command
             }
         }
 
-        if ($facts->hasLocalEntrypoint && ! $this->hasGeneratedPlanFile($plan, AgentReadyPath::LOCAL)) {
+        if ($facts->hasLocalEntrypoint && ! $this->hasGeneratedPlanFile($plan, AgentsReadyPath::LOCAL)) {
             return false;
         }
 
@@ -555,24 +523,35 @@ final class InstallCommand extends Command
         return PathInput::relativeOption($name, is_string($value) ? $value : '');
     }
 
-    private function domainOption(string $name, string $default): string
+    private function projectSlugOption(): ?string
     {
-        if (! $this->optionWasPassed($name)) {
-            return PathInput::domainOption($name, $default);
+        if (! $this->optionWasPassed('project-slug')) {
+            return null;
         }
 
-        $option = $this->option($name);
+        $option = $this->option('project-slug');
 
-        return PathInput::domainOption($name, is_string($option) ? $option : '');
+        return PathInput::projectSlugOption('project-slug', is_string($option) ? $option : '');
+    }
+
+    private function routeDomainOption(): ?string
+    {
+        if (! $this->optionWasPassed('route-domain')) {
+            return null;
+        }
+
+        $option = $this->option('route-domain');
+
+        return PathInput::domainOption('route-domain', is_string($option) ? $option : '');
     }
 
     /**
      * @param  array<int, string>  $allowed
      */
-    private function choiceOption(string $name, array $allowed, string $default): string
+    private function choiceOption(string $name, array $allowed): ?string
     {
         if (! $this->optionWasPassed($name)) {
-            return $default;
+            return null;
         }
 
         $option = $this->option($name);
@@ -590,26 +569,12 @@ final class InstallCommand extends Command
         return $this->input->hasParameterOption('--'.$name);
     }
 
-    private function detectedTraefikHome(string $root): ?string
-    {
-        $sibling = dirname($root).'/shared-traefik';
-
-        return is_executable($sibling.'/bin/ensure') ? $sibling : null;
-    }
-
-    private function detectedServicesHome(string $root): ?string
-    {
-        $sibling = dirname($root).'/shared-services';
-
-        return is_executable($sibling.'/bin/ensure') ? $sibling : null;
-    }
-
     /**
      * @return array<string, mixed>
      */
-    private function agentReadyConfig(string $root): array
+    private function agentsReadyConfig(string $root): array
     {
-        $path = $root.'/'.AgentReadyPath::AGENT_READY_CONFIG;
+        $path = $root.'/'.AgentsReadyPath::AGENTS_READY_CONFIG;
 
         if (! is_file($path)) {
             return [];
@@ -620,20 +585,10 @@ final class InstallCommand extends Command
         return is_array($decoded) ? $decoded : [];
     }
 
-    /**
-     * @param  array<string, mixed>  $config
-     */
-    private function configString(array $config, string $key): ?string
-    {
-        $value = $config[$key] ?? null;
-
-        return is_string($value) && $value !== '' ? $value : null;
-    }
-
     private function syncLocalConfig(string $root, string $traefikHome, string $servicesHome): bool
     {
-        $path = $root.'/'.AgentReadyPath::AGENT_READY_CONFIG;
-        $config = $this->agentReadyConfig($root);
+        $path = $root.'/'.AgentsReadyPath::AGENTS_READY_CONFIG;
+        $config = $this->agentsReadyConfig($root);
         $config['version'] = 1;
         $config['traefikHome'] = $traefikHome;
         $config['servicesHome'] = $servicesHome;
@@ -649,7 +604,7 @@ final class InstallCommand extends Command
         }
 
         if (file_put_contents($path, $content) === false) {
-            throw new RuntimeException('Unable to write ['.AgentReadyPath::AGENT_READY_CONFIG.'].');
+            throw new RuntimeException('Unable to write ['.AgentsReadyPath::AGENTS_READY_CONFIG.'].');
         }
 
         return true;
@@ -661,16 +616,16 @@ final class InstallCommand extends Command
      */
     private function conflictGuidance(string $root, array $paths, string $toolsPath, string $dockerPath): array
     {
-        $messages = ['Agent-Ready did not modify any files.'];
+        $messages = ['Agents-Ready did not modify any files.'];
 
-        if (in_array(AgentReadyPath::LOCAL, $paths, true)) {
-            $messages[] = 'Existing ./local detected. Agent-Ready expects ./local to be its entrypoint; rename or adapt the existing script before rerunning if you want Agent-Ready to own it.';
+        if (in_array(AgentsReadyPath::LOCAL, $paths, true)) {
+            $messages[] = 'Existing ./local detected. Agents-Ready expects ./local to be its entrypoint; rename or adapt the existing script before rerunning if you want Agents-Ready to own it.';
         }
 
         if ($this->hasComposeConflict($paths)) {
             $messages[] = $this->looksLikeSailCompose($root)
-                ? 'Existing Laravel Sail Compose detected. Agent-Ready does not require Sail and will not rewrite Sail files; decide whether to keep Sail or migrate before rerunning.'
-                : 'Existing Compose files detected. Agent-Ready V1 does not merge Compose files; keep them user-owned and compare a clean throwaway install before manual adoption.';
+                ? 'Existing Laravel Sail Compose detected. Agents-Ready does not require Sail and will not rewrite Sail files; decide whether to keep Sail or migrate before rerunning.'
+                : 'Existing Compose files detected. Agents-Ready V1 does not merge Compose files; keep them user-owned and compare a clean throwaway install before manual adoption.';
         }
 
         if ($this->hasPathUnder($paths, $toolsPath)) {
@@ -681,8 +636,8 @@ final class InstallCommand extends Command
             $messages[] = "Existing files under {$dockerPath}/ detected. Rerun with --docker-path=... if that tree is already used by this project.";
         }
 
-        if (in_array(AgentReadyPath::OPENCODE_EXAMPLE, $paths, true)) {
-            $messages[] = 'Existing opencode.jsonc.example detected. Compare it manually with Agent-Ready guidance before choosing which version to keep.';
+        if (in_array(AgentsReadyPath::OPENCODE_EXAMPLE, $paths, true)) {
+            $messages[] = 'Existing opencode.jsonc.example detected. Compare it manually with Agents-Ready guidance before choosing which version to keep.';
         }
 
         return array_values(array_unique($messages));
@@ -693,7 +648,7 @@ final class InstallCommand extends Command
      */
     private function hasComposeConflict(array $paths): bool
     {
-        return in_array(AgentReadyPath::COMPOSE, $paths, true);
+        return in_array(AgentsReadyPath::COMPOSE, $paths, true);
     }
 
     /**
@@ -714,7 +669,7 @@ final class InstallCommand extends Command
 
     private function looksLikeSailCompose(string $root): bool
     {
-        $compose = $root.'/'.AgentReadyPath::COMPOSE;
+        $compose = $root.'/'.AgentsReadyPath::COMPOSE;
 
         if (! is_file($compose)) {
             return false;

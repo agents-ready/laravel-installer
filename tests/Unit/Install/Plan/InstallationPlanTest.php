@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace EdgarSedov\AgentReadyInstaller\Tests\Unit\Install\Plan;
+namespace AgentsReady\LaravelInstaller\Tests\Unit\Install\Plan;
 
-use EdgarSedov\AgentReadyInstaller\Install\Operations\WriteFileOperation;
-use EdgarSedov\AgentReadyInstaller\Install\Plan\InstallationPlan;
-use EdgarSedov\AgentReadyInstaller\Tests\UnitTestCase;
+use AgentsReady\LaravelInstaller\Install\Operations\WriteFileOperation;
+use AgentsReady\LaravelInstaller\Install\Plan\InstallationPlan;
+use AgentsReady\LaravelInstaller\Tests\UnitTestCase;
 use InvalidArgumentException;
 
 final class InstallationPlanTest extends UnitTestCase

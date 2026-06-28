@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace EdgarSedov\AgentReadyInstaller\Install\Support;
+namespace AgentsReady\LaravelInstaller\Install\Support;
 
 use RuntimeException;
 
@@ -57,7 +57,7 @@ final class TextFilePatcher
         $end = strpos($existing, $endMarker);
 
         if ($start === false || $end === false || $end < $start) {
-            throw new RuntimeException("Unable to patch [{$path}] because the Agent-Ready managed block markers are incomplete.");
+            throw new RuntimeException("Unable to patch [{$path}] because the Agents-Ready managed block markers are incomplete.");
         }
 
         $end += strlen($endMarker);

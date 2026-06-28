@@ -2,8 +2,9 @@
 
 declare(strict_types=1);
 
-namespace EdgarSedov\AgentReadyInstaller\Install\Support;
+namespace AgentsReady\LaravelInstaller\Install\Support;
 
+use AgentsReady\LaravelInstaller\Install\ProjectContext;
 use InvalidArgumentException;
 
 final class PathInput
@@ -62,6 +63,17 @@ final class PathInput
     public static function domainOption(string $name, string $domain): string
     {
         return self::hostnameOption($name, $domain);
+    }
+
+    public static function projectSlugOption(string $name, string $slug): string
+    {
+        $normalized = ProjectContext::normalizeSlug($slug);
+
+        if ($normalized === null) {
+            throw new InvalidArgumentException("Option --{$name} must include at least one letter or number after normalization.");
+        }
+
+        return $normalized;
     }
 
     private static function invalidRelativeOption(string $name): never

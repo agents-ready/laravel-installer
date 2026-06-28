@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace EdgarSedov\AgentReadyInstaller\Tests;
+namespace AgentsReady\LaravelInstaller\Tests;
 
-use EdgarSedov\AgentReadyInstaller\Tests\Support\UsesTemporaryPaths;
-use EdgarSedov\AgentReadyInstaller\Tests\Support\WritesLaravelComposerJson;
+use AgentsReady\LaravelInstaller\Tests\Support\UsesTemporaryPaths;
+use AgentsReady\LaravelInstaller\Tests\Support\WritesLaravelComposerJson;
 use PHPUnit\Framework\TestCase as PHPUnitTestCase;
 
 abstract class UnitTestCase extends PHPUnitTestCase

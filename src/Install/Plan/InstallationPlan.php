@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace EdgarSedov\AgentReadyInstaller\Install\Plan;
+namespace AgentsReady\LaravelInstaller\Install\Plan;
 
-use EdgarSedov\AgentReadyInstaller\Install\Operations\InstallOperation;
+use AgentsReady\LaravelInstaller\Install\Operations\InstallOperation;
 use InvalidArgumentException;
 
 final readonly class InstallationPlan

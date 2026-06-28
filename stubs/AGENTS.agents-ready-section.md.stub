@@ -1,10 +1,10 @@
-## Agent-Ready Local Tooling
+## Agents-Ready Local Tooling
 
 - Use `./local up` to start local services.
 - Use `./local npm install` before starting Vite in a fresh checkout.
 - Use `./local test` after application changes.
 - Use `./local worktree list` and `./local worktree status` to inspect managed checkout state.
-- Use `./local worktree create <path> --branch <branch> [--id <id>]` for linked local worktrees after Agent-Ready generated files are committed.
+- Use `./local worktree create <path> --branch <branch> [--id <id>]` for linked local worktrees after Agents-Ready generated files are committed.
 - Worktrees share the project Postgres and Valkey containers, with per-worktree database names plus Redis prefixes. Horizon prefixes apply only when Horizon is enabled.
 - Do not require Laravel Sail; `./local sail ...` forwards to this project's wrapper.
 {{ local_agent_notes_guidance }}

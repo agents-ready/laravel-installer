@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace EdgarSedov\AgentReadyInstaller\Install\Support;
+namespace AgentsReady\LaravelInstaller\Install\Support;
 
 use RuntimeException;
 

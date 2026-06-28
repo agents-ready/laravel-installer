@@ -4,7 +4,7 @@
          bootstrap="vendor/autoload.php"
          colors="true">
     <testsuites>
-        <testsuite name="Agent Ready Installer Test Suite">
+        <testsuite name="Agents-Ready Installer Test Suite">
             <directory>tests</directory>
         </testsuite>
     </testsuites>

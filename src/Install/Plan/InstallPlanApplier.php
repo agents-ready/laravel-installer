@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace EdgarSedov\AgentReadyInstaller\Install\Plan;
+namespace AgentsReady\LaravelInstaller\Install\Plan;
 
-use EdgarSedov\AgentReadyInstaller\Install\Operations\AppendMissingLinesOperation;
-use EdgarSedov\AgentReadyInstaller\Install\Operations\UpsertMarkedBlockOperation;
-use EdgarSedov\AgentReadyInstaller\Install\Operations\WriteFileOperation;
-use EdgarSedov\AgentReadyInstaller\Install\Support\TextFilePatcher;
+use AgentsReady\LaravelInstaller\Install\Operations\AppendMissingLinesOperation;
+use AgentsReady\LaravelInstaller\Install\Operations\UpsertMarkedBlockOperation;
+use AgentsReady\LaravelInstaller\Install\Operations\WriteFileOperation;
+use AgentsReady\LaravelInstaller\Install\Support\TextFilePatcher;
 use RuntimeException;
 
 final class InstallPlanApplier

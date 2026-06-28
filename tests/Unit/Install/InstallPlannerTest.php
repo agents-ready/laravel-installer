@@ -2,16 +2,16 @@
 
 declare(strict_types=1);
 
-namespace EdgarSedov\AgentReadyInstaller\Tests\Unit\Install;
+namespace AgentsReady\LaravelInstaller\Tests\Unit\Install;
 
-use EdgarSedov\AgentReadyInstaller\Install\InstallOptions;
-use EdgarSedov\AgentReadyInstaller\Install\InstallPlanner;
-use EdgarSedov\AgentReadyInstaller\Install\Operations\AppendMissingLinesOperation;
-use EdgarSedov\AgentReadyInstaller\Install\Operations\UpsertMarkedBlockOperation;
-use EdgarSedov\AgentReadyInstaller\Install\Operations\WriteFileOperation;
-use EdgarSedov\AgentReadyInstaller\Install\Plan\InstallationPlan;
-use EdgarSedov\AgentReadyInstaller\Install\ProjectContext;
-use EdgarSedov\AgentReadyInstaller\Tests\UnitTestCase;
+use AgentsReady\LaravelInstaller\Install\InstallOptions;
+use AgentsReady\LaravelInstaller\Install\InstallPlanner;
+use AgentsReady\LaravelInstaller\Install\Operations\AppendMissingLinesOperation;
+use AgentsReady\LaravelInstaller\Install\Operations\UpsertMarkedBlockOperation;
+use AgentsReady\LaravelInstaller\Install\Operations\WriteFileOperation;
+use AgentsReady\LaravelInstaller\Install\Plan\InstallationPlan;
+use AgentsReady\LaravelInstaller\Install\ProjectContext;
+use AgentsReady\LaravelInstaller\Tests\UnitTestCase;
 
 final class InstallPlannerTest extends UnitTestCase
 {
@@ -25,24 +25,24 @@ final class InstallPlannerTest extends UnitTestCase
         $paths = $plan->paths();
 
         $this->assertContains('local', $paths);
-        $this->assertContains('tools/agent-ready/local.sh', $paths);
-        $this->assertContains('tools/agent-ready/lib/common.sh', $paths);
-        $this->assertContains('tools/agent-ready/lib/worktrees.sh', $paths);
+        $this->assertContains('tools/agents-ready/local.sh', $paths);
+        $this->assertContains('tools/agents-ready/lib/common.sh', $paths);
+        $this->assertContains('tools/agents-ready/lib/worktrees.sh', $paths);
         $this->assertContains('docker-compose.yml', $paths);
         $this->assertNotContains('docker-compose.shared.yml', $paths);
-        $this->assertContains('docker/agent-ready/frankenphp/Dockerfile', $paths);
-        $this->assertContains('docker/agent-ready/frankenphp/Caddyfile', $paths);
-        $this->assertNotContains('docker/agent-ready/php-fpm/Dockerfile', $paths);
-        $this->assertNotContains('docker/agent-ready/nginx/default.conf', $paths);
+        $this->assertContains('docker/agents-ready/frankenphp/Dockerfile', $paths);
+        $this->assertContains('docker/agents-ready/frankenphp/Caddyfile', $paths);
+        $this->assertNotContains('docker/agents-ready/php-fpm/Dockerfile', $paths);
+        $this->assertNotContains('docker/agents-ready/nginx/default.conf', $paths);
         $this->assertContains('opencode.jsonc.example', $paths);
         $this->assertContains('.env.testing.example', $paths);
         $this->assertNotContains('AGENTS.local.example.md', $paths);
-        $this->assertNotContains('tools/agent-ready/lib/agents.sh', $paths);
+        $this->assertNotContains('tools/agents-ready/lib/agents.sh', $paths);
         $this->assertNotContains('.ai/skills/bootstrap-current-checkout/SKILL.md', $paths);
         $this->assertNotContains('.ai/skills/worktree-lifecycle/SKILL.md', $paths);
-        $this->assertNotContains('.agent-ready/config.json', $paths);
-        $this->assertContains('.agent-ready/worktree.json', $paths);
-        $this->assertContains('.agent-ready/worktrees.json', $paths);
+        $this->assertNotContains('.agents-ready/config.json', $paths);
+        $this->assertContains('.agents-ready/worktree.json', $paths);
+        $this->assertContains('.agents-ready/worktrees.json', $paths);
         $this->assertNotContains('docs/decision-notes/README.md', $paths);
         $this->assertNotContains('opencode.jsonc', $paths);
         $this->assertNotContains('.mcp.json', $paths);
@@ -50,7 +50,7 @@ final class InstallPlannerTest extends UnitTestCase
         $this->assertContains('.gitignore', $paths);
         $this->assertInstanceOf(WriteFileOperation::class, $plan->operationFor('local'));
         $this->assertTrue($this->writeOperationFor($plan, '.env.testing.example')->createsIfMissing());
-        $this->assertTrue($this->writeOperationFor($plan, '.agent-ready/worktree.json')->createsIfMissing());
+        $this->assertTrue($this->writeOperationFor($plan, '.agents-ready/worktree.json')->createsIfMissing());
         $this->assertInstanceOf(UpsertMarkedBlockOperation::class, $plan->operationFor('AGENTS.md'));
         $gitignoreOperation = $plan->operationFor('.gitignore');
 
@@ -124,11 +124,11 @@ final class InstallPlannerTest extends UnitTestCase
 
         $paths = $plan->paths();
 
-        $this->assertContains('.agent-ready/worktree.json', $paths);
-        $this->assertContains('.agent-ready/worktrees.json', $paths);
+        $this->assertContains('.agents-ready/worktree.json', $paths);
+        $this->assertContains('.agents-ready/worktrees.json', $paths);
         $this->assertNotContains('AGENTS.local.md', $paths);
-        $this->assertTrue($this->writeOperationFor($plan, '.agent-ready/worktree.json')->createsIfMissing());
-        $this->assertTrue($this->writeOperationFor($plan, '.agent-ready/worktrees.json')->createsIfMissing());
+        $this->assertTrue($this->writeOperationFor($plan, '.agents-ready/worktree.json')->createsIfMissing());
+        $this->assertTrue($this->writeOperationFor($plan, '.agents-ready/worktrees.json')->createsIfMissing());
     }
 
     public function test_companion_config_is_optional_ignored_local_state(): void
@@ -138,9 +138,9 @@ final class InstallPlannerTest extends UnitTestCase
             $this->installOptions(traefikHome: '/home/example/shared-traefik', servicesHome: '/home/example/shared-services'),
         );
 
-        $config = json_decode($this->contentFor($plan, '.agent-ready/config.json'), true, 512, JSON_THROW_ON_ERROR);
+        $config = json_decode($this->contentFor($plan, '.agents-ready/config.json'), true, 512, JSON_THROW_ON_ERROR);
 
-        $this->assertTrue($this->writeOperationFor($plan, '.agent-ready/config.json')->createsIfMissing());
+        $this->assertTrue($this->writeOperationFor($plan, '.agents-ready/config.json')->createsIfMissing());
         $this->assertSame([
             'version' => 1,
             'traefikHome' => '/home/example/shared-traefik',
@@ -174,11 +174,11 @@ final class InstallPlannerTest extends UnitTestCase
 
         $paths = $plan->paths();
 
-        $this->assertContains('tools/agent-ready/lib/agents.sh', $paths);
+        $this->assertContains('tools/agents-ready/lib/agents.sh', $paths);
         $this->assertContains('.ai/skills/bootstrap-current-checkout/SKILL.md', $paths);
         $this->assertContains('.ai/skills/worktree-lifecycle/SKILL.md', $paths);
-        $this->assertStringContainsString('agents link', $this->contentFor($plan, 'tools/agent-ready/local.sh'));
-        $this->assertStringContainsString('./local agents link', $this->contentFor($plan, 'tools/agent-ready/lib/worktrees.sh'));
+        $this->assertStringContainsString('agents link', $this->contentFor($plan, 'tools/agents-ready/local.sh'));
+        $this->assertStringContainsString('./local agents link', $this->contentFor($plan, 'tools/agents-ready/lib/worktrees.sh'));
         $this->assertStringContainsString('"skill": [".agents/skills"]', $this->contentFor($plan, 'opencode.jsonc.example'));
         $agentsSection = (new InstallPlanner)->agentsSection($this->installOptions(agentSkills: true));
 
@@ -200,11 +200,11 @@ final class InstallPlannerTest extends UnitTestCase
         $this->assertStringContainsString('profiles:', $compose);
         $this->assertStringContainsString('- frontend', $compose);
         $this->assertStringContainsString('${COMPOSE_PROJECT_NAME:-fresh-laravel-app}', $compose);
-        $this->assertStringContainsString('context: ./docker/agent-ready/frankenphp', $compose);
+        $this->assertStringContainsString('context: ./docker/agents-ready/frankenphp', $compose);
         $this->assertStringContainsString('traefik.enable=true', $compose);
         $this->assertStringContainsString('traefik.docker.network=traefik-public', $compose);
-        $this->assertStringContainsString('${AGENT_READY_APP_HOST:-fresh-laravel-app.localhost}', $compose);
-        $this->assertStringContainsString('${AGENT_READY_VITE_HOST:-vite.fresh-laravel-app.localhost}', $compose);
+        $this->assertStringContainsString('${AGENTS_READY_APP_HOST:-fresh-laravel-app.localhost}', $compose);
+        $this->assertStringContainsString('${AGENTS_READY_VITE_HOST:-vite.fresh-laravel-app.localhost}', $compose);
         $this->assertStringContainsString('entrypoints=websecure', $compose);
         $this->assertStringContainsString('tls=true', $compose);
         $this->assertStringContainsString('shared-services:', $compose);
@@ -229,15 +229,15 @@ final class InstallPlannerTest extends UnitTestCase
         $nginxCompose = $this->contentFor($nginxPlan, 'worktree.docker-compose.yml');
 
         $this->assertSame(['worktree.docker-compose.yml'], $frankenPlan->paths());
-        $this->assertStringContainsString('Agent-Ready existing-project candidate companion file.', $frankenCompose);
+        $this->assertStringContainsString('Agents-Ready existing-project candidate companion file.', $frankenCompose);
         $this->assertStringContainsString('Review and manually integrate this file', $frankenCompose);
         $this->assertStringContainsString('It is not wired automatically', $frankenCompose);
-        $this->assertStringContainsString('context: ./docker/agent-ready/frankenphp', $frankenCompose);
+        $this->assertStringContainsString('context: ./docker/agents-ready/frankenphp', $frankenCompose);
         $this->assertStringNotContainsString('nginx:1.27.4', $frankenCompose);
         $this->assertSame(['worktree.docker-compose.yml'], $nginxPlan->paths());
-        $this->assertStringContainsString('context: ./docker/agent-ready/php-fpm', $nginxCompose);
+        $this->assertStringContainsString('context: ./docker/agents-ready/php-fpm', $nginxCompose);
         $this->assertStringContainsString('nginx:1.27.4', $nginxCompose);
-        $this->assertStringNotContainsString('context: ./docker/agent-ready/frankenphp', $nginxCompose);
+        $this->assertStringNotContainsString('context: ./docker/agents-ready/frankenphp', $nginxCompose);
     }
 
     public function test_horizon_option_generates_worker_profile_and_persists_state(): void
@@ -246,13 +246,13 @@ final class InstallPlannerTest extends UnitTestCase
             ProjectContext::fromPath($this->makeProjectRoot()),
             $this->installOptions(horizon: true),
         );
-        $state = json_decode($this->contentFor($plan, '.agent-ready/worktree.json'), true, 512, JSON_THROW_ON_ERROR);
+        $state = json_decode($this->contentFor($plan, '.agents-ready/worktree.json'), true, 512, JSON_THROW_ON_ERROR);
         $compose = $this->contentFor($plan, 'docker-compose.yml');
 
         $this->assertSame(true, $state['horizon']);
         $this->assertArrayNotHasKey('horizonPrefix', $state);
         $this->assertStringContainsString('  horizon:', $compose);
-        $this->assertStringContainsString('context: ./docker/agent-ready/frankenphp', $compose);
+        $this->assertStringContainsString('context: ./docker/agents-ready/frankenphp', $compose);
         $this->assertStringContainsString('command: php artisan horizon', $compose);
         $this->assertStringContainsString('- horizon', $compose);
         $this->assertStringContainsString('HORIZON_PREFIX: ${HORIZON_PREFIX}', $compose);
@@ -274,7 +274,7 @@ final class InstallPlannerTest extends UnitTestCase
             ProjectContext::fromPath($this->makeProjectRoot()),
             $this->installOptions(),
         );
-        $dockerfile = $this->contentFor($plan, 'docker/agent-ready/frankenphp/Dockerfile');
+        $dockerfile = $this->contentFor($plan, 'docker/agents-ready/frankenphp/Dockerfile');
 
         $this->assertStringContainsString('dunglas/frankenphp:1.4.0-php8.4', $dockerfile);
         $this->assertStringContainsString('composer:2.9.2', $dockerfile);
@@ -288,7 +288,7 @@ final class InstallPlannerTest extends UnitTestCase
             ProjectContext::fromPath($this->makeProjectRoot()),
             $this->installOptions(databaseEngine: 'mysql'),
         );
-        $dockerfile = $this->contentFor($plan, 'docker/agent-ready/frankenphp/Dockerfile');
+        $dockerfile = $this->contentFor($plan, 'docker/agents-ready/frankenphp/Dockerfile');
 
         $this->assertStringContainsString('docker-php-ext-install pdo_mysql', $dockerfile);
         $this->assertStringNotContainsString('libpq-dev', $dockerfile);
@@ -302,24 +302,24 @@ final class InstallPlannerTest extends UnitTestCase
             $this->installOptions(runtime: 'nginx-php-fpm', databaseEngine: 'mysql'),
         );
         $paths = $plan->paths();
-        $state = json_decode($this->contentFor($plan, '.agent-ready/worktree.json'), true, 512, JSON_THROW_ON_ERROR);
+        $state = json_decode($this->contentFor($plan, '.agents-ready/worktree.json'), true, 512, JSON_THROW_ON_ERROR);
         $compose = $this->contentFor($plan, 'docker-compose.yml');
-        $dockerfile = $this->contentFor($plan, 'docker/agent-ready/php-fpm/Dockerfile');
+        $dockerfile = $this->contentFor($plan, 'docker/agents-ready/php-fpm/Dockerfile');
 
-        $this->assertContains('docker/agent-ready/php-fpm/Dockerfile', $paths);
-        $this->assertContains('docker/agent-ready/nginx/default.conf', $paths);
-        $this->assertNotContains('docker/agent-ready/frankenphp/Dockerfile', $paths);
-        $this->assertNotContains('docker/agent-ready/frankenphp/Caddyfile', $paths);
+        $this->assertContains('docker/agents-ready/php-fpm/Dockerfile', $paths);
+        $this->assertContains('docker/agents-ready/nginx/default.conf', $paths);
+        $this->assertNotContains('docker/agents-ready/frankenphp/Dockerfile', $paths);
+        $this->assertNotContains('docker/agents-ready/frankenphp/Caddyfile', $paths);
         $this->assertSame('nginx-php-fpm', $state['runtime']);
         $this->assertSame('mysql', $state['databaseEngine']);
-        $this->assertStringContainsString('context: ./docker/agent-ready/php-fpm', $compose);
+        $this->assertStringContainsString('context: ./docker/agents-ready/php-fpm', $compose);
         $this->assertStringContainsString('nginx:1.27.4', $compose);
         $this->assertStringContainsString('shared-services:', $compose);
         $this->assertStringContainsString('traefik-public:', $compose);
         $this->assertStringContainsString('php:8.4.15-fpm', $dockerfile);
         $this->assertStringContainsString('composer:2.9.2', $dockerfile);
         $this->assertStringContainsString('docker-php-ext-install pdo_mysql', $dockerfile);
-        $this->assertStringContainsString('fastcgi_pass app:9000;', $this->contentFor($plan, 'docker/agent-ready/nginx/default.conf'));
+        $this->assertStringContainsString('fastcgi_pass app:9000;', $this->contentFor($plan, 'docker/agents-ready/nginx/default.conf'));
     }
 
     public function test_nginx_php_fpm_runtime_can_generate_horizon_worker_profile(): void
@@ -328,13 +328,13 @@ final class InstallPlannerTest extends UnitTestCase
             ProjectContext::fromPath($this->makeProjectRoot()),
             $this->installOptions(runtime: 'nginx-php-fpm', databaseEngine: 'mysql', horizon: true),
         );
-        $state = json_decode($this->contentFor($plan, '.agent-ready/worktree.json'), true, 512, JSON_THROW_ON_ERROR);
+        $state = json_decode($this->contentFor($plan, '.agents-ready/worktree.json'), true, 512, JSON_THROW_ON_ERROR);
         $compose = $this->contentFor($plan, 'docker-compose.yml');
 
         $this->assertSame(true, $state['horizon']);
         $this->assertStringContainsString('  horizon:', $compose);
-        $this->assertStringContainsString('context: ./docker/agent-ready/php-fpm', $compose);
-        $this->assertStringNotContainsString('context: ./docker/agent-ready/frankenphp', $compose);
+        $this->assertStringContainsString('context: ./docker/agents-ready/php-fpm', $compose);
+        $this->assertStringNotContainsString('context: ./docker/agents-ready/frankenphp', $compose);
         $this->assertStringContainsString('command: php artisan horizon', $compose);
         $this->assertStringContainsString('- horizon', $compose);
         $this->assertStringContainsString('HORIZON_PREFIX: ${HORIZON_PREFIX}', $compose);
@@ -360,10 +360,10 @@ final class InstallPlannerTest extends UnitTestCase
             ProjectContext::fromPath($this->makeProjectRoot()),
             $this->installOptions(),
         );
-        $local = $this->contentFor($plan, 'tools/agent-ready/local.sh');
+        $local = $this->contentFor($plan, 'tools/agents-ready/local.sh');
         $shim = $this->contentFor($plan, 'local');
 
-        $this->assertStringContainsString('tools/agent-ready/local.sh', $shim);
+        $this->assertStringContainsString('tools/agents-ready/local.sh', $shim);
         $this->assertStringContainsString('assets build', $local);
         $this->assertStringContainsString('npm ...', $local);
         $this->assertStringContainsString('compose_exec app php', $local);
@@ -381,13 +381,13 @@ final class InstallPlannerTest extends UnitTestCase
             ProjectContext::fromPath($this->makeProjectRoot()),
             $this->installOptions(),
         );
-        $common = $this->contentFor($plan, 'tools/agent-ready/lib/common.sh');
-        $worktreesScript = $this->contentFor($plan, 'tools/agent-ready/lib/worktrees.sh');
+        $common = $this->contentFor($plan, 'tools/agents-ready/lib/common.sh');
+        $worktreesScript = $this->contentFor($plan, 'tools/agents-ready/lib/worktrees.sh');
 
         $this->assertStringContainsString('traefik_home', $common);
-        $this->assertStringNotContainsString('AGENT_READY_TRAEFIK_HOME', $common);
+        $this->assertStringNotContainsString('AGENTS_READY_TRAEFIK_HOME', $common);
         $this->assertStringContainsString('services_home', $common);
-        $this->assertStringNotContainsString('AGENT_READY_SERVICES_HOME', $common);
+        $this->assertStringNotContainsString('AGENTS_READY_SERVICES_HOME', $common);
         $this->assertStringContainsString('ensure_shared_services', $common);
         $this->assertStringContainsString('provision_shared_databases', $common);
         $this->assertStringContainsString('derive_shared_checkout_env', $common);
@@ -395,7 +395,7 @@ final class InstallPlannerTest extends UnitTestCase
         $this->assertStringContainsString('cleanup_shared_databases', $common);
         $this->assertStringContainsString('cleanup_shared_valkey_namespaces', $common);
         $this->assertStringContainsString('cleanup_shared_horizon_namespaces', $common);
-        $this->assertStringContainsString('bin/ensure" --database="$AGENT_READY_DATABASE_ENGINE" --cache=valkey', $common);
+        $this->assertStringContainsString('bin/ensure" --database="$AGENTS_READY_DATABASE_ENGINE" --cache=valkey', $common);
         $this->assertStringContainsString('bin/provision-checkout"', $common);
         $this->assertStringContainsString('bin/derive-checkout"', $common);
         $this->assertStringContainsString('bin/drop-checkout"', $common);
@@ -423,7 +423,7 @@ final class InstallPlannerTest extends UnitTestCase
             $this->installOptions(),
         );
 
-        $this->assertStringNotContainsString('./local agents link', $this->contentFor($plan, 'tools/agent-ready/lib/worktrees.sh'));
+        $this->assertStringNotContainsString('./local agents link', $this->contentFor($plan, 'tools/agents-ready/lib/worktrees.sh'));
     }
 
     public function test_rendered_generated_operation_contents_have_no_unresolved_tokens(): void
@@ -470,13 +470,13 @@ final class InstallPlannerTest extends UnitTestCase
         );
         $paths = [
             'local',
-            'tools/agent-ready/local.sh',
-            'tools/agent-ready/lib/common.sh',
-            'tools/agent-ready/lib/worktrees.sh',
+            'tools/agents-ready/local.sh',
+            'tools/agents-ready/lib/common.sh',
+            'tools/agents-ready/lib/worktrees.sh',
         ];
 
         foreach ($paths as $generatedPath) {
-            $path = $this->temporaryPath('agent-ready-shell-');
+            $path = $this->temporaryPath('agents-ready-shell-');
             file_put_contents($path, $this->contentFor($plan, $generatedPath));
 
             $output = [];
@@ -492,7 +492,7 @@ final class InstallPlannerTest extends UnitTestCase
         $root = $this->makeProjectRoot();
         $plan = (new InstallPlanner)->plan(ProjectContext::fromPath($root), new InstallOptions(hostRoot: $root));
 
-        $state = json_decode($this->contentFor($plan, '.agent-ready/worktree.json'), true, 512, JSON_THROW_ON_ERROR);
+        $state = json_decode($this->contentFor($plan, '.agents-ready/worktree.json'), true, 512, JSON_THROW_ON_ERROR);
 
         $this->assertSame(1, $state['version']);
         $this->assertSame($root, $state['root']);
@@ -519,7 +519,7 @@ final class InstallPlannerTest extends UnitTestCase
         $root = $this->makeProjectRoot();
         $plan = (new InstallPlanner)->plan(ProjectContext::fromPath($root), new InstallOptions(hostRoot: $root));
 
-        $index = json_decode($this->contentFor($plan, '.agent-ready/worktrees.json'), true, 512, JSON_THROW_ON_ERROR);
+        $index = json_decode($this->contentFor($plan, '.agents-ready/worktrees.json'), true, 512, JSON_THROW_ON_ERROR);
 
         $this->assertSame(1, $index['version']);
         $this->assertSame('fresh-laravel-app', $index['worktrees'][0]['id']);
@@ -549,7 +549,7 @@ final class InstallPlannerTest extends UnitTestCase
         $root = $this->makeProjectRoot('laravel/laravel');
         $plan = (new InstallPlanner)->plan(ProjectContext::fromPath($root), new InstallOptions(hostRoot: $root));
 
-        $state = json_decode($this->contentFor($plan, '.agent-ready/worktree.json'), true, 512, JSON_THROW_ON_ERROR);
+        $state = json_decode($this->contentFor($plan, '.agents-ready/worktree.json'), true, 512, JSON_THROW_ON_ERROR);
 
         $expected = basename($root);
 
@@ -566,10 +566,48 @@ final class InstallPlannerTest extends UnitTestCase
             new InstallOptions(hostRoot: '/home/example/app'),
         );
 
-        $state = json_decode($this->contentFor($plan, '.agent-ready/worktree.json'), true, 512, JSON_THROW_ON_ERROR);
+        $state = json_decode($this->contentFor($plan, '.agents-ready/worktree.json'), true, 512, JSON_THROW_ON_ERROR);
 
         $this->assertSame('/home/example/app', $state['root']);
         $this->assertSame('/home/example/app', $state['mainWorktree']);
+    }
+
+    public function test_host_root_override_is_used_for_laravel_skeleton_project_slug(): void
+    {
+        $root = $this->makeProjectRoot('laravel/laravel');
+        $plan = (new InstallPlanner)->plan(
+            ProjectContext::fromPath($root),
+            new InstallOptions(hostRoot: '/home/example/real-agent-app'),
+        );
+
+        $state = json_decode($this->contentFor($plan, '.agents-ready/worktree.json'), true, 512, JSON_THROW_ON_ERROR);
+        $index = json_decode($this->contentFor($plan, '.agents-ready/worktrees.json'), true, 512, JSON_THROW_ON_ERROR);
+        $compose = $this->contentFor($plan, 'docker-compose.yml');
+
+        $this->assertSame('real-agent-app', $state['projectId']);
+        $this->assertSame('real-agent-app', $state['worktreeId']);
+        $this->assertSame('real-agent-app.localhost', $state['routeDomain']);
+        $this->assertSame('real-agent-app', $index['worktrees'][0]['id']);
+        $this->assertSame('real-agent-app.localhost', $index['worktrees'][0]['appHost']);
+        $this->assertStringContainsString('name: ${COMPOSE_PROJECT_NAME:-real-agent-app}', $compose);
+        $this->assertStringContainsString('${AGENTS_READY_APP_HOST:-real-agent-app.localhost}', $compose);
+    }
+
+    public function test_project_slug_option_overrides_context_slug(): void
+    {
+        $root = $this->makeProjectRoot();
+        $plan = (new InstallPlanner)->plan(
+            ProjectContext::fromPath($root),
+            new InstallOptions(hostRoot: $root, projectSlug: 'real-app'),
+        );
+
+        $state = json_decode($this->contentFor($plan, '.agents-ready/worktree.json'), true, 512, JSON_THROW_ON_ERROR);
+        $compose = $this->contentFor($plan, 'docker-compose.yml');
+
+        $this->assertSame('real-app', $state['projectId']);
+        $this->assertSame('real-app', $state['worktreeId']);
+        $this->assertSame('real-app.localhost', $state['routeDomain']);
+        $this->assertStringContainsString('name: ${COMPOSE_PROJECT_NAME:-real-app}', $compose);
     }
 
     public function test_route_domain_can_be_customized(): void
@@ -583,16 +621,16 @@ final class InstallPlannerTest extends UnitTestCase
             ),
         );
 
-        $state = json_decode($this->contentFor($plan, '.agent-ready/worktree.json'), true, 512, JSON_THROW_ON_ERROR);
-        $index = json_decode($this->contentFor($plan, '.agent-ready/worktrees.json'), true, 512, JSON_THROW_ON_ERROR);
+        $state = json_decode($this->contentFor($plan, '.agents-ready/worktree.json'), true, 512, JSON_THROW_ON_ERROR);
+        $index = json_decode($this->contentFor($plan, '.agents-ready/worktrees.json'), true, 512, JSON_THROW_ON_ERROR);
         $compose = $this->contentFor($plan, 'docker-compose.yml');
 
         $this->assertSame('project.localhost', $state['routeDomain']);
         $this->assertArrayNotHasKey('appHost', $state);
         $this->assertArrayNotHasKey('viteHost', $state);
         $this->assertSame('project.localhost', $index['worktrees'][0]['appHost']);
-        $this->assertStringContainsString('${AGENT_READY_APP_HOST:-project.localhost}', $compose);
-        $this->assertStringContainsString('${AGENT_READY_VITE_HOST:-vite.project.localhost}', $compose);
+        $this->assertStringContainsString('${AGENTS_READY_APP_HOST:-project.localhost}', $compose);
+        $this->assertStringContainsString('${AGENTS_READY_VITE_HOST:-vite.project.localhost}', $compose);
     }
 
     private function contentFor(InstallationPlan $plan, string $path): string
@@ -613,10 +651,11 @@ final class InstallPlannerTest extends UnitTestCase
         bool $decisionNotes = false,
         bool $localAgentNotes = false,
         bool $agentSkills = false,
-        string $toolsPath = 'tools/agent-ready',
-        string $dockerPath = 'docker/agent-ready',
+        string $toolsPath = 'tools/agents-ready',
+        string $dockerPath = 'docker/agents-ready',
         ?string $traefikHome = null,
         ?string $servicesHome = null,
+        ?string $projectSlug = null,
         ?string $routeDomain = null,
         string $runtime = 'frankenphp',
         string $databaseEngine = 'pgsql',
@@ -631,6 +670,7 @@ final class InstallPlannerTest extends UnitTestCase
             dockerPath: $dockerPath,
             traefikHome: $traefikHome,
             servicesHome: $servicesHome,
+            projectSlug: $projectSlug,
             routeDomain: $routeDomain,
             runtime: $runtime,
             databaseEngine: $databaseEngine,
@@ -640,7 +680,7 @@ final class InstallPlannerTest extends UnitTestCase
 
     private function makeProjectRoot(string $name = 'example/fresh-laravel-app'): string
     {
-        $root = $this->temporaryDirectory('agent-ready-installer-test-');
+        $root = $this->temporaryDirectory('agents-ready-installer-test-');
 
         $this->writeLaravelComposerJson($root, $name);
         file_put_contents($root.'/.env.example', "APP_NAME=Laravel\nAPP_ENV=local\n");

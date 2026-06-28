@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace EdgarSedov\AgentReadyInstaller\Tests\Unit\Install\Support;
+namespace AgentsReady\LaravelInstaller\Tests\Unit\Install\Support;
 
-use EdgarSedov\AgentReadyInstaller\Install\Support\StubRenderer;
-use EdgarSedov\AgentReadyInstaller\Tests\UnitTestCase;
+use AgentsReady\LaravelInstaller\Install\Support\StubRenderer;
+use AgentsReady\LaravelInstaller\Tests\UnitTestCase;
 use RuntimeException;
 
 final class StubRendererTest extends UnitTestCase
@@ -17,10 +17,10 @@ final class StubRendererTest extends UnitTestCase
         ]);
 
         $rendered = (new StubRenderer($root))->render('hello.stub', [
-            'name' => 'Agent-Ready',
+            'name' => 'Agents-Ready',
         ]);
 
-        $this->assertSame("Hello Agent-Ready.\n{{ missing }}\n", $rendered);
+        $this->assertSame("Hello Agents-Ready.\n{{ missing }}\n", $rendered);
     }
 
     public function test_render_fails_with_clear_message_when_stub_is_missing(): void
@@ -38,7 +38,7 @@ final class StubRendererTest extends UnitTestCase
      */
     private function makeStubRoot(array $files = []): string
     {
-        $root = $this->temporaryDirectory('agent-ready-stub-renderer-test-');
+        $root = $this->temporaryDirectory('agents-ready-stub-renderer-test-');
 
         foreach ($files as $path => $content) {
             $target = $root.'/'.$path;
