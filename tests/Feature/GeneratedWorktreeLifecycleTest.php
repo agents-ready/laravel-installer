@@ -30,6 +30,7 @@ final class GeneratedWorktreeLifecycleTest extends UnitTestCase
     {
         $root = $this->makeCommittedGeneratedProject();
         $target = $this->temporaryPath('agents-ready-generated-worktree-');
+        $fakeDockerBin = $this->fakeUnavailableDockerBin();
 
         $this->runIn($root, ['./local', 'worktree', 'create', $target, '--branch', 'feature/generated', '--id', 'generated']);
 
@@ -59,7 +60,9 @@ final class GeneratedWorktreeLifecycleTest extends UnitTestCase
         $this->assertStringContainsString('generated', $listOutput);
         $this->assertStringContainsString($target, $listOutput);
 
-        $this->runIn($root, ['./local', 'worktree', 'remove', 'generated', '--force']);
+        $this->runIn($root, ['./local', 'worktree', 'remove', 'generated', '--force'], [
+            'PATH' => $fakeDockerBin.PATH_SEPARATOR.(string) getenv('PATH'),
+        ]);
 
         $this->assertDirectoryDoesNotExist($target);
 
@@ -508,6 +511,16 @@ final class GeneratedWorktreeLifecycleTest extends UnitTestCase
         $root = $this->temporaryDirectory('agents-ready-fake-docker-bin-');
 
         file_put_contents($root.'/docker', "#!/usr/bin/env bash\nprintf 'docker %s\\n' \"\$*\" >> ".escapeshellarg($log)."\nexit 0\n");
+        chmod($root.'/docker', 0755);
+
+        return $root;
+    }
+
+    private function fakeUnavailableDockerBin(): string
+    {
+        $root = $this->temporaryDirectory('agents-ready-fake-unavailable-docker-bin-');
+
+        file_put_contents($root.'/docker', "#!/usr/bin/env bash\nexit 1\n");
         chmod($root.'/docker', 0755);
 
         return $root;
