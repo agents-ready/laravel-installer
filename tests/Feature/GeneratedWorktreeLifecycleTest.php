@@ -45,7 +45,7 @@ final class GeneratedWorktreeLifecycleTest extends UnitTestCase
         $this->assertArrayNotHasKey('appDatabase', $state);
         $this->assertArrayNotHasKey('valkeyPrefix', $state);
         $this->assertFileDoesNotExist($target.'/.env');
-        $this->assertFileIsReadable($target.'/.agents/skills/bootstrap-current-checkout/SKILL.md');
+        $this->assertFileIsReadable($target.'/tools/agents-ready/skills/worktree-lifecycle/SKILL.md');
 
         $indexAfterCreate = json_decode((string) file_get_contents($root.'/.agents-ready/worktrees.json'), true, 512, JSON_THROW_ON_ERROR);
 
@@ -437,7 +437,7 @@ final class GeneratedWorktreeLifecycleTest extends UnitTestCase
         $root = $this->makeProjectRoot();
         $planner = new InstallPlanner;
         $context = ProjectContext::fromPath($root);
-        $options = new InstallOptions(hostRoot: $root, agentSkills: true, routeDomain: $routeDomain, runtime: $runtime, databaseEngine: $databaseEngine, horizon: $horizon);
+        $options = new InstallOptions(hostRoot: $root, routeDomain: $routeDomain, runtime: $runtime, databaseEngine: $databaseEngine, horizon: $horizon);
 
         (new InstallPlanApplier(new TextFilePatcher))->apply($root, $planner->plan($context, $options));
 

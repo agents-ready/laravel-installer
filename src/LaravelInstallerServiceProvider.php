@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace AgentsReady\LaravelInstaller;
 
+use AgentsReady\LaravelInstaller\Console\ConventionsCommand;
 use AgentsReady\LaravelInstaller\Console\InstallCommand;
 use Illuminate\Support\ServiceProvider;
 
@@ -16,6 +17,7 @@ final class LaravelInstallerServiceProvider extends ServiceProvider
         }
 
         $this->commands([
+            ConventionsCommand::class,
             InstallCommand::class,
         ]);
     }

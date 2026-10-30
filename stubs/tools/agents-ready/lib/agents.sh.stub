@@ -23,3 +23,39 @@ link_agents() {
     fi
   done
 }
+
+agents_ready_convention_usage() {
+  cat >&2 <<'USAGE'
+  agents link                Link local agent skill activation folders
+USAGE
+}
+
+agents_ready_handle_convention_command() {
+  local cmd="$1"
+  shift || true
+
+  case "$cmd" in
+    agents)
+      local sub=${1:-}
+      shift || true
+      case "$sub" in
+        link)
+          link_agents
+          ;;
+        *)
+          echo "Usage: ./local agents link" >&2
+          exit 2
+          ;;
+      esac
+      return 0
+      ;;
+  esac
+
+  return 1
+}
+
+agents_ready_after_worktree_create() {
+  local target="$1"
+
+  (cd "$target" && ./local agents link)
+}

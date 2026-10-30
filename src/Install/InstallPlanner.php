@@ -13,15 +13,17 @@ use InvalidArgumentException;
 
 final class InstallPlanner
 {
-    private const AGENTS_START = '<!-- agents-ready:start -->';
-
-    private const AGENTS_END = '<!-- agents-ready:end -->';
-
     private readonly StubRenderer $stubs;
+
+    private readonly GeneratedTooling $tooling;
+
+    private readonly AgentsGuidance $agentsGuidance;
 
     public function __construct(?StubRenderer $stubs = null)
     {
         $this->stubs = $stubs ?? new StubRenderer;
+        $this->tooling = new GeneratedTooling($this->stubs);
+        $this->agentsGuidance = new AgentsGuidance($this->stubs);
     }
 
     public function plan(ProjectContext $context, InstallOptions $options): InstallationPlan
@@ -36,31 +38,17 @@ final class InstallPlanner
         $viteHost = $this->viteHost($routeDomain);
 
         $operations = [
-            WriteFileOperation::conflictIfDifferent(AgentsReadyPath::LOCAL, $this->localWrapper($toolsPath), 0755),
-            WriteFileOperation::conflictIfDifferent(AgentsReadyPath::localDispatcher($toolsPath), $this->localDispatcher($options), 0755),
-            WriteFileOperation::conflictIfDifferent(AgentsReadyPath::commonLibrary($toolsPath), $this->commonShellLibrary()),
-            WriteFileOperation::conflictIfDifferent(AgentsReadyPath::worktreesLibrary($toolsPath), $this->worktreesShellLibrary($options)),
+            WriteFileOperation::conflictIfDifferent(AgentsReadyPath::LOCAL, $this->tooling->localWrapper($toolsPath), 0755),
+            WriteFileOperation::conflictIfDifferent(AgentsReadyPath::localDispatcher($toolsPath), $this->tooling->localDispatcher(), 0755),
+            WriteFileOperation::conflictIfDifferent(AgentsReadyPath::commonLibrary($toolsPath), $this->tooling->commonShellLibrary()),
+            WriteFileOperation::conflictIfDifferent(AgentsReadyPath::worktreesLibrary($toolsPath), $this->tooling->worktreesShellLibrary()),
+            WriteFileOperation::conflictIfDifferent(AgentsReadyPath::coreWorktreeSkill($toolsPath), $this->worktreeSkill()),
             WriteFileOperation::conflictIfDifferent(AgentsReadyPath::COMPOSE, $this->compose($slug, $dockerPath, $appHost, $viteHost, $options)),
             ...$this->runtimeSupportOperations($options),
-            WriteFileOperation::conflictIfDifferent(AgentsReadyPath::OPENCODE_EXAMPLE, $this->opencodeExample($options)),
         ];
 
-        if ($options->localAgentNotes) {
-            $operations[] = WriteFileOperation::conflictIfDifferent(AgentsReadyPath::AGENTS_LOCAL_EXAMPLE, $this->agentsLocalExample());
-        }
-
-        if ($options->agentSkills) {
-            $operations[] = WriteFileOperation::conflictIfDifferent(AgentsReadyPath::agentsLibrary($toolsPath), $this->agentsShellLibrary());
-            $operations[] = WriteFileOperation::conflictIfDifferent(AgentsReadyPath::BOOTSTRAP_SKILL, $this->bootstrapSkill());
-            $operations[] = WriteFileOperation::conflictIfDifferent(AgentsReadyPath::WORKTREE_SKILL, $this->worktreeSkill());
-        }
-
-        if ($options->decisionNotes) {
-            $operations[] = WriteFileOperation::conflictIfDifferent(AgentsReadyPath::DECISION_NOTES_README, $this->decisionNotesReadme());
-        }
-
         if ($options->traefikHome !== null || $options->servicesHome !== null) {
-            $operations[] = WriteFileOperation::createIfMissing(AgentsReadyPath::AGENTS_READY_CONFIG, $this->config($options->traefikHome, $options->servicesHome));
+            $operations[] = WriteFileOperation::createIfMissing(AgentsReadyPath::AGENTS_READY_CONFIG, $this->config($options));
         }
 
         if (($envTestingExample = $this->envTestingExample($context)) !== null) {
@@ -73,12 +61,8 @@ final class InstallPlanner
             WriteFileOperation::createIfMissing(AgentsReadyPath::AGENTS_READY_WORKTREES, $this->worktreesIndex($options, $slug, $appHost)),
         ];
 
-        if ($options->localAgentNotes) {
-            $operations[] = WriteFileOperation::createIfMissing(AgentsReadyPath::AGENTS_LOCAL, $this->agentsLocal());
-        }
-
-        $operations[] = new UpsertMarkedBlockOperation(AgentsReadyPath::AGENTS, self::AGENTS_START, self::AGENTS_END, $this->agentsSection($options));
-        $operations[] = new AppendMissingLinesOperation('.gitignore', $this->gitignoreLines($context, $options));
+        $operations[] = new UpsertMarkedBlockOperation(AgentsReadyPath::AGENTS, AgentsGuidance::START, AgentsGuidance::END, $this->agentsGuidance->section());
+        $operations[] = new AppendMissingLinesOperation('.gitignore', $this->gitignoreLines());
 
         return new InstallationPlan($operations);
     }
@@ -99,40 +83,9 @@ final class InstallPlanner
         ]);
     }
 
-    private function localWrapper(string $toolsPath): string
-    {
-        return $this->stubs->render('local.stub', ['tools_path' => $toolsPath]);
-    }
-
     private function projectSlug(ProjectContext $context, InstallOptions $options): string
     {
         return $options->projectSlug ?? $context->slug($options->hostRoot);
-    }
-
-    private function localDispatcher(InstallOptions $options): string
-    {
-        return $this->stubs->render('tools/agents-ready/local.sh.stub', [
-            'agent_source_line' => $options->agentSkills ? $this->stubs->render('tools/agents-ready/fragments/agents-source-line.sh.stub') : '',
-            'agent_usage_line' => $options->agentSkills ? $this->stubs->render('tools/agents-ready/fragments/agents-usage-line.txt.stub') : '',
-            'agent_command_case' => $options->agentSkills ? $this->stubs->render('tools/agents-ready/fragments/agents-command-case.sh.stub') : '',
-        ]);
-    }
-
-    private function commonShellLibrary(): string
-    {
-        return $this->stubs->render('tools/agents-ready/lib/common.sh.stub');
-    }
-
-    private function agentsShellLibrary(): string
-    {
-        return $this->stubs->render('tools/agents-ready/lib/agents.sh.stub');
-    }
-
-    private function worktreesShellLibrary(InstallOptions $options): string
-    {
-        return $this->stubs->render('tools/agents-ready/lib/worktrees.sh.stub', [
-            'agent_link_after_create' => $options->agentSkills ? '  (cd "$target" && ./local agents link)' : '',
-        ]);
     }
 
     private function compose(string $slug, string $dockerPath, string $appHost, string $viteHost, InstallOptions $options): string
@@ -203,84 +156,25 @@ final class InstallPlanner
         return $this->stubs->render('docker/agents-ready/nginx/default.conf.stub');
     }
 
-    public function agentsSection(InstallOptions $options): string
-    {
-        return $this->stubs->render('AGENTS.agents-ready-section.md.stub', [
-            'local_agent_notes_guidance' => $options->localAgentNotes ? $this->localAgentNotesGuidance() : '',
-            'agent_skills_guidance' => $options->agentSkills ? $this->agentSkillsGuidance() : '',
-        ]);
-    }
-
-    private function localAgentNotesGuidance(): string
-    {
-        return $this->stubs->render('AGENTS.local-guidance.md.stub', [
-            'agents_local' => AgentsReadyPath::AGENTS_LOCAL,
-        ]);
-    }
-
-    private function agentSkillsGuidance(): string
-    {
-        return $this->stubs->render('AGENTS.skills-guidance.md.stub', [
-            'ai_skills' => AgentsReadyPath::AI_SKILLS,
-            'agents_skills' => AgentsReadyPath::AGENTS_SKILLS,
-            'claude_skills' => AgentsReadyPath::CLAUDE_SKILLS,
-            'cursor_skills' => AgentsReadyPath::CURSOR_SKILLS,
-        ]);
-    }
-
-    private function agentsLocalExample(): string
-    {
-        return $this->stubs->render('AGENTS.local.example.md.stub');
-    }
-
-    private function agentsLocal(): string
-    {
-        return $this->stubs->render('AGENTS.local.example.md.stub');
-    }
-
-    private function bootstrapSkill(): string
-    {
-        return $this->stubs->render('.ai/skills/bootstrap-current-checkout/SKILL.md.stub');
-    }
-
     private function worktreeSkill(): string
     {
         return $this->stubs->render('.ai/skills/worktree-lifecycle/SKILL.md.stub');
     }
 
-    private function opencodeExample(InstallOptions $options): string
-    {
-        $instructions = ['"'.AgentsReadyPath::AGENTS.'"'];
-
-        if ($options->localAgentNotes) {
-            $instructions[] = '"'.AgentsReadyPath::AGENTS_LOCAL.'"';
-        }
-
-        return $this->stubs->render('opencode.jsonc.example.stub', [
-            'instructions' => implode(', ', $instructions),
-            'skill_config' => $options->agentSkills ? $this->opencodeSkillConfig() : '',
-        ]);
-    }
-
-    private function opencodeSkillConfig(): string
-    {
-        return $this->stubs->render('opencode.skill-config.json.stub', [
-            'agents_skills' => AgentsReadyPath::AGENTS_SKILLS,
-        ]);
-    }
-
-    private function config(?string $traefikHome, ?string $servicesHome): string
+    private function config(InstallOptions $options): string
     {
         $config = [
             'version' => 1,
+            'toolsPath' => $options->toolsPath,
+            'dockerPath' => $options->dockerPath,
         ];
 
-        if ($traefikHome !== null) {
-            $config['traefikHome'] = $traefikHome;
+        if ($options->traefikHome !== null) {
+            $config['traefikHome'] = $options->traefikHome;
         }
 
-        if ($servicesHome !== null) {
-            $config['servicesHome'] = $servicesHome;
+        if ($options->servicesHome !== null) {
+            $config['servicesHome'] = $options->servicesHome;
         }
 
         return json_encode($config, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR)."\n";
@@ -337,11 +231,6 @@ final class InstallPlanner
         return 'vite.'.$routeDomain;
     }
 
-    private function decisionNotesReadme(): string
-    {
-        return $this->stubs->render('docs/decision-notes/README.md.stub');
-    }
-
     private function envTestingExample(ProjectContext $context): ?string
     {
         foreach ([AgentsReadyPath::ENV_TESTING, AgentsReadyPath::ENV, AgentsReadyPath::ENV_EXAMPLE] as $path) {
@@ -371,9 +260,9 @@ final class InstallPlanner
     /**
      * @return array<int, string>
      */
-    private function gitignoreLines(ProjectContext $context, InstallOptions $options): array
+    private function gitignoreLines(): array
     {
-        $lines = [
+        return [
             '# Agents-Ready Laravel local state',
             $this->ignoreDirectory(AgentsReadyPath::AGENTS_READY),
             $this->ignorePath(AgentsReadyPath::ENV_TESTING),
@@ -381,25 +270,6 @@ final class InstallPlanner
             $this->ignorePath(AgentsReadyPath::MCP),
             $this->ignorePath(AgentsReadyPath::AUTH),
         ];
-
-        if ($options->agentSkills || is_dir($context->root.'/'.AgentsReadyPath::AI_SKILLS)) {
-            $lines[] = $this->ignoreDirectory(AgentsReadyPath::AGENTS_SKILLS);
-            $lines[] = $this->ignorePath(AgentsReadyPath::CLAUDE_SKILLS);
-            $lines[] = $this->ignorePath(AgentsReadyPath::CURSOR_SKILLS);
-        }
-
-        if ($options->localAgentNotes || $this->pathExists($context->root, AgentsReadyPath::AGENTS_LOCAL)) {
-            $lines[] = $this->ignorePath(AgentsReadyPath::AGENTS_LOCAL);
-        }
-
-        return $lines;
-    }
-
-    private function pathExists(string $root, string $path): bool
-    {
-        $target = $root.'/'.$path;
-
-        return file_exists($target) || is_link($target);
     }
 
     private function assertSupportedOptions(InstallOptions $options): void

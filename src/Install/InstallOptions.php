@@ -18,9 +18,6 @@ final readonly class InstallOptions
 
     public function __construct(
         public string $hostRoot,
-        public bool $decisionNotes = false,
-        public bool $localAgentNotes = false,
-        public bool $agentSkills = false,
         public string $toolsPath = 'tools/agents-ready',
         public string $dockerPath = 'docker/agents-ready',
         public ?string $traefikHome = null,
