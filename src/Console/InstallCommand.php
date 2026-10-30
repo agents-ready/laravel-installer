@@ -29,9 +29,6 @@ final class InstallCommand extends Command
         {--runtime=frankenphp : Runtime to generate: frankenphp or nginx-php-fpm}
         {--database=pgsql : Database engine to use: pgsql or mysql}
         {--horizon : Include an optional Horizon worker service}
-        {--decision-notes : Include the optional docs/decision-notes project convention}
-        {--local-agent-notes : Include AGENTS.local.example.md and initialize ignored AGENTS.local.md}
-        {--agent-skills : Include tracked .ai/skills and ignored activation-folder convention}
         {--tools-path=tools/agents-ready : Relative path for generated Agents-Ready host scripts}
         {--docker-path=docker/agents-ready : Relative root path for generated Agents-Ready Docker support files}
         {--traefik-home= : Absolute host path to shared-traefik; persisted in ignored .agents-ready/config.json}
@@ -88,16 +85,8 @@ final class InstallCommand extends Command
             return self::FAILURE;
         }
 
-        $decisionNotes = (bool) $this->option('decision-notes');
-        $localAgentNotes = (bool) $this->option('local-agent-notes');
-        $agentSkills = (bool) $this->option('agent-skills');
         $horizon = (bool) $this->option('horizon');
         $existingProjectCandidates = (bool) $this->option('existing-project-candidates');
-        $hasDecisionNotes = $this->pathExists($context->root, AgentsReadyPath::DECISION_NOTES_README);
-        $hasLocalAgentNotes = $this->pathExists($context->root, AgentsReadyPath::AGENTS_LOCAL)
-            || $this->pathExists($context->root, AgentsReadyPath::AGENTS_LOCAL_EXAMPLE);
-        $hasAgentSkills = is_dir($context->root.'/'.AgentsReadyPath::AI_SKILLS)
-            || $this->pathExists($context->root, AgentsReadyPath::AGENTS_SKILLS);
         if ($this->input->isInteractive()) {
             $promptForToolsPath = ! $this->optionWasPassed('tools-path');
             $promptForDockerPath = ! $this->optionWasPassed('docker-path');
@@ -148,9 +137,6 @@ final class InstallCommand extends Command
         $existingProject = $this->existingProjects->detect($context, $dockerPath);
         $preflightOptions = new InstallOptions(
             hostRoot: $hostRoot,
-            decisionNotes: $decisionNotes,
-            localAgentNotes: $localAgentNotes,
-            agentSkills: $agentSkills,
             toolsPath: $toolsPath,
             dockerPath: $dockerPath,
             projectSlug: $projectSlug,
@@ -163,9 +149,6 @@ final class InstallCommand extends Command
         if ($existingProjectCandidates) {
             return $this->writeExistingProjectCandidates($context, $existingProject, new InstallOptions(
                 hostRoot: $hostRoot,
-                decisionNotes: $decisionNotes,
-                localAgentNotes: $localAgentNotes,
-                agentSkills: $agentSkills,
                 toolsPath: $toolsPath,
                 dockerPath: $dockerPath,
                 traefikHome: $traefikHome,
@@ -184,28 +167,8 @@ final class InstallCommand extends Command
             return self::FAILURE;
         }
 
-        if ($this->input->isInteractive()) {
-            if (! $localAgentNotes && ! $hasLocalAgentNotes) {
-                $this->line('Local agent notes add a tracked AGENTS.local.example.md and ignored AGENTS.local.md for machine-specific notes, secrets references, and personal agent preferences.');
-                $localAgentNotes = $this->confirm('Add local agent notes convention?');
-            }
-
-            if (! $agentSkills && ! $hasAgentSkills) {
-                $this->line('Agent skills add tracked .ai/skills source files and an ignored .agents/skills activation folder for tools that support skills.');
-                $agentSkills = $this->confirm('Add agent skills convention?');
-            }
-
-            if (! $decisionNotes && ! $hasDecisionNotes) {
-                $this->line('Decision notes add an optional docs/decision-notes convention for recording project decisions.');
-                $decisionNotes = $this->confirm('Add decision-notes guidance?');
-            }
-        }
-
         $options = new InstallOptions(
             hostRoot: $hostRoot,
-            decisionNotes: $decisionNotes,
-            localAgentNotes: $localAgentNotes,
-            agentSkills: $agentSkills,
             toolsPath: $toolsPath,
             dockerPath: $dockerPath,
             traefikHome: $traefikHome,
@@ -247,7 +210,7 @@ final class InstallCommand extends Command
         }
 
         try {
-            $configUpdated = $this->syncLocalConfig($context->root, $traefikHome, $servicesHome);
+            $configUpdated = $this->syncLocalConfig($context->root, $toolsPath, $dockerPath, $traefikHome, $servicesHome);
         } catch (RuntimeException $exception) {
             $this->components->error($exception->getMessage());
 
@@ -278,9 +241,7 @@ final class InstallCommand extends Command
             $this->components->info('All generated files were already up to date.');
         }
 
-        if (! $options->decisionNotes && ! $hasDecisionNotes) {
-            $this->components->info('Optional: rerun with --decision-notes to add lightweight project decision-note guidance.');
-        }
+        $this->components->info('Optional: run php artisan agents-ready:conventions to add project/team agent conventions.');
 
         $this->components->info('Inspect tracked changes with git diff, then run ./local up. Local state lives in ignored .agents-ready/.');
 
@@ -585,11 +546,13 @@ final class InstallCommand extends Command
         return is_array($decoded) ? $decoded : [];
     }
 
-    private function syncLocalConfig(string $root, string $traefikHome, string $servicesHome): bool
+    private function syncLocalConfig(string $root, string $toolsPath, string $dockerPath, string $traefikHome, string $servicesHome): bool
     {
         $path = $root.'/'.AgentsReadyPath::AGENTS_READY_CONFIG;
         $config = $this->agentsReadyConfig($root);
         $config['version'] = 1;
+        $config['toolsPath'] = $toolsPath;
+        $config['dockerPath'] = $dockerPath;
         $config['traefikHome'] = $traefikHome;
         $config['servicesHome'] = $servicesHome;
         $content = json_encode($config, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR)."\n";
@@ -684,12 +647,5 @@ final class InstallCommand extends Command
         return str_contains($content, 'laravel.test')
             || str_contains($content, 'vendor/laravel/sail')
             || str_contains(strtolower($content), 'laravel sail');
-    }
-
-    private function pathExists(string $root, string $path): bool
-    {
-        $target = $root.'/'.$path;
-
-        return file_exists($target) || is_link($target);
     }
 }

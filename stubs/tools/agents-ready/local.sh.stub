@@ -4,8 +4,10 @@ set -euo pipefail
 tool_root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 source "$tool_root/lib/common.sh"
-{{ agent_source_line }}
 source "$tool_root/lib/worktrees.sh"
+if [[ -f "$tool_root/lib/agents.sh" ]]; then
+  source "$tool_root/lib/agents.sh"
+fi
 
 usage() {
   cat >&2 <<'USAGE'
@@ -27,7 +29,11 @@ Commands:
   npm ...                    Run npm in the Vite container
   mcp boost                  Run Laravel Boost MCP over stdio
   traefik ensure|status|prune
-{{ agent_usage_line }}
+USAGE
+  if declare -F agents_ready_convention_usage >/dev/null; then
+    agents_ready_convention_usage
+  fi
+  cat >&2 <<'USAGE'
   worktree list|create|up|down|status|remove
   sail ...                   Compatibility alias for this wrapper
 USAGE
@@ -123,7 +129,6 @@ case "${cmd}" in
         ;;
     esac
     ;;
-{{ agent_command_case }}
   worktree)
     sub=${1:-}
     shift || true
@@ -161,6 +166,9 @@ case "${cmd}" in
     exec "$0" "$@"
     ;;
   *)
+    if declare -F agents_ready_handle_convention_command >/dev/null && agents_ready_handle_convention_command "$cmd" "$@"; then
+      exit 0
+    fi
     usage
     exit 2
     ;;

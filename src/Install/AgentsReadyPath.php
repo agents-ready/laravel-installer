@@ -50,9 +50,11 @@ final class AgentsReadyPath
 
     public const CURSOR_SKILLS = '.cursor/skills';
 
-    public const BOOTSTRAP_SKILL = '.ai/skills/bootstrap-current-checkout/SKILL.md';
+    public const AI_BOOTSTRAP_SKILL = '.ai/skills/bootstrap-current-checkout/SKILL.md';
 
-    public const WORKTREE_SKILL = '.ai/skills/worktree-lifecycle/SKILL.md';
+    public const AI_WORKTREE_SKILL = '.ai/skills/worktree-lifecycle/SKILL.md';
+
+    public const CORE_WORKTREE_SKILL_NAME = 'worktree-lifecycle/SKILL.md';
 
     public const DECISION_NOTES_README = 'docs/decision-notes/README.md';
 
@@ -76,6 +78,11 @@ final class AgentsReadyPath
     public static function worktreesLibrary(string $toolsPath): string
     {
         return self::join($toolsPath, 'lib/worktrees.sh');
+    }
+
+    public static function coreWorktreeSkill(string $toolsPath): string
+    {
+        return self::join($toolsPath, 'skills/'.self::CORE_WORKTREE_SKILL_NAME);
     }
 
     public static function frankenphpDockerfile(string $dockerPath): string

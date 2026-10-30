@@ -371,7 +371,9 @@ create_worktree() {
 
   write_worktree_state "$target" "$id" "$main"
   propagate_local_files "$target"
-{{ agent_link_after_create }}
+  if declare -F agents_ready_after_worktree_create >/dev/null; then
+    agents_ready_after_worktree_create "$target"
+  fi
   write_worktrees_index
 
   echo "Created managed worktree '$id' at $target"

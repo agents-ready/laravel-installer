@@ -10,9 +10,12 @@ This repository is pre-release V1 work. The public command surface is intentiona
 
 ```bash
 php artisan agents-ready:install
+php artisan agents-ready:conventions
 ```
 
-The installer writes files and local state only. It does not provision Docker resources during installation. The first `./local up` starts shared companions, provisions checkout databases/cache namespaces, starts runtime containers, and materializes runtime env files.
+The installer writes core tooling files and local state only. It does not provision Docker resources during installation. The first `./local up` starts shared companions, provisions checkout databases/cache namespaces, starts runtime containers, and materializes runtime env files.
+
+Optional project/team conventions are intentionally separate from core installation. Use `agents-ready:conventions` for files such as local agent notes, tracked skill placement, activation-link helpers, and decision-note templates.
 
 ## Requirements
 
@@ -20,6 +23,7 @@ The installer writes files and local state only. It does not provision Docker re
 - Docker with Docker Compose v2.
 - A shared Traefik companion checkout.
 - A shared services companion checkout.
+- `mkcert` installed on the host for trusted local HTTPS certificates.
 
 Most projects keep the companion checkouts next to the application checkout:
 
@@ -29,6 +33,38 @@ Most projects keep the companion checkouts next to the application checkout:
 ```
 
 The installer always requires explicit host paths for the app checkout and both companions. This keeps Docker-based installs unambiguous and makes the generated local config reproducible.
+
+## First-Time Checklist
+
+1. Start Docker.
+2. Install and initialize `mkcert` on the host.
+3. Clone `shared-traefik` and `shared-services` next to the app checkout.
+4. Install `agents-ready/laravel-installer` in the Laravel app.
+5. Run `php artisan agents-ready:install` with the three required host paths.
+6. Optionally run `php artisan agents-ready:conventions` for project/team agent conventions.
+7. Run `./local up --wait`.
+
+## Local HTTPS Certificates
+
+Agents-Ready routes app URLs through shared Traefik over HTTPS, for example `https://real-agent-app.localhost`. For browser-trusted certificates, install `mkcert` and run `mkcert -install` once on the host before the first `./local up`.
+
+macOS with Homebrew:
+
+```bash
+brew install mkcert nss
+mkcert -install
+```
+
+Ubuntu/Debian:
+
+```bash
+sudo apt install libnss3-tools mkcert
+mkcert -install
+```
+
+Windows is WSL2-first for now. Install and initialize `mkcert` inside WSL for Linux CLI tools and Linux browsers. If browsing from Windows Chrome or Edge, also install/run `mkcert -install` on Windows so the Windows trust store knows the local CA.
+
+If `mkcert` is missing, shared Traefik falls back to a self-signed certificate. CLI checks can still use `curl -k`, but browsers will show certificate warnings.
 
 ## Quick Start
 
@@ -60,7 +96,13 @@ php artisan agents-ready:install \
   --services-home="$(cd ../shared-services && pwd)"
 ```
 
-The install command is interactive by default. It will ask for project slug, runtime, database, and optional project conventions.
+The install command is interactive by default. It will ask for project slug, runtime, and database. Optional project/team conventions are installed separately.
+
+Optionally add conventions:
+
+```bash
+php artisan agents-ready:conventions
+```
 
 Start the stack:
 
@@ -76,6 +118,8 @@ Verify:
 ./local test
 curl -kI https://real-agent-app.localhost
 ```
+
+Use `curl -kI` for CLI checks because it works even before the local CA is trusted by that shell environment. Browsers should trust the certificate after `mkcert -install`.
 
 ## No Host Composer
 
@@ -142,7 +186,7 @@ Install the package as a development dependency in the Laravel application:
 composer require --dev agents-ready/laravel-installer
 ```
 
-Run the installer interactively. The three host paths are required arguments; project slug, runtime, database, and optional conventions can be selected from prompts.
+Run the installer interactively. The three host paths are required arguments; project slug, runtime, and database can be selected from prompts.
 
 ```bash
 php artisan agents-ready:install \
@@ -165,6 +209,12 @@ php artisan agents-ready:install \
 ```
 
 When installing from Docker, `--host-root` should be the real host checkout path. If the Laravel app still has the skeleton Composer name `laravel/laravel`, Agents-Ready derives the default project slug from this host path instead of the container mount path such as `/app`.
+
+Run optional conventions separately when you want project/team agent workflow files:
+
+```bash
+php artisan agents-ready:conventions
+```
 
 ## Options
 
@@ -200,10 +250,12 @@ php artisan agents-ready:install --route-domain=custom.localhost
 Optional project conventions:
 
 ```bash
-php artisan agents-ready:install --decision-notes
-php artisan agents-ready:install --local-agent-notes
-php artisan agents-ready:install --agent-skills
+php artisan agents-ready:conventions --decision-notes
+php artisan agents-ready:conventions --local-agent-notes
+php artisan agents-ready:conventions --agent-skills
 ```
+
+Core install always includes the canonical worktree lifecycle skill under `tools/agents-ready/skills/worktree-lifecycle/SKILL.md`. The `--agent-skills` convention mirrors skills into tracked `.ai/skills`, adds ignored activation-link support such as `.agents/skills`, and enables `./local agents link` through optional wrapper hooks.
 
 Existing project candidate mode:
 
@@ -235,6 +287,8 @@ Common commands after installation:
 Vite is explicit: `./local up` does not start Vite. Use `./local assets dev` when needed.
 
 `./local sail ...` is a compatibility alias for the generated wrapper. After `./local up`, direct `docker compose ...` commands also work for compatible workflows.
+
+If the agent skills convention is installed, run `./local agents link` to populate ignored activation links.
 
 ## Identity And Env
 

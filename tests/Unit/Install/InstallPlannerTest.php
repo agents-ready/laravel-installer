@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace AgentsReady\LaravelInstaller\Tests\Unit\Install;
 
+use AgentsReady\LaravelInstaller\Install\AgentsGuidance;
 use AgentsReady\LaravelInstaller\Install\InstallOptions;
 use AgentsReady\LaravelInstaller\Install\InstallPlanner;
 use AgentsReady\LaravelInstaller\Install\Operations\AppendMissingLinesOperation;
@@ -28,13 +29,14 @@ final class InstallPlannerTest extends UnitTestCase
         $this->assertContains('tools/agents-ready/local.sh', $paths);
         $this->assertContains('tools/agents-ready/lib/common.sh', $paths);
         $this->assertContains('tools/agents-ready/lib/worktrees.sh', $paths);
+        $this->assertContains('tools/agents-ready/skills/worktree-lifecycle/SKILL.md', $paths);
         $this->assertContains('docker-compose.yml', $paths);
         $this->assertNotContains('docker-compose.shared.yml', $paths);
         $this->assertContains('docker/agents-ready/frankenphp/Dockerfile', $paths);
         $this->assertContains('docker/agents-ready/frankenphp/Caddyfile', $paths);
         $this->assertNotContains('docker/agents-ready/php-fpm/Dockerfile', $paths);
         $this->assertNotContains('docker/agents-ready/nginx/default.conf', $paths);
-        $this->assertContains('opencode.jsonc.example', $paths);
+        $this->assertNotContains('opencode.jsonc.example', $paths);
         $this->assertContains('.env.testing.example', $paths);
         $this->assertNotContains('AGENTS.local.example.md', $paths);
         $this->assertNotContains('tools/agents-ready/lib/agents.sh', $paths);
@@ -99,22 +101,6 @@ final class InstallPlannerTest extends UnitTestCase
         $this->assertSame("APP_NAME=Example\n", $this->contentFor($plan, '.env.testing.example'));
     }
 
-    public function test_decision_notes_are_optional(): void
-    {
-        $plan = (new InstallPlanner)->plan(
-            ProjectContext::fromPath($this->makeProjectRoot()),
-            $this->installOptions(decisionNotes: true),
-        );
-
-        $paths = $plan->paths();
-
-        $this->assertContains('docs/decision-notes/README.md', $paths);
-        $this->assertStringContainsString(
-            'Decision Notes',
-            $this->contentFor($plan, 'docs/decision-notes/README.md'),
-        );
-    }
-
     public function test_plan_contains_create_if_missing_ignored_lifecycle_state(): void
     {
         $plan = (new InstallPlanner)->plan(
@@ -143,48 +129,11 @@ final class InstallPlannerTest extends UnitTestCase
         $this->assertTrue($this->writeOperationFor($plan, '.agents-ready/config.json')->createsIfMissing());
         $this->assertSame([
             'version' => 1,
+            'toolsPath' => 'tools/agents-ready',
+            'dockerPath' => 'docker/agents-ready',
             'traefikHome' => '/home/example/shared-traefik',
             'servicesHome' => '/home/example/shared-services',
         ], $config);
-    }
-
-    public function test_local_agent_notes_are_optional_ignored_local_state(): void
-    {
-        $plan = (new InstallPlanner)->plan(
-            ProjectContext::fromPath($this->makeProjectRoot()),
-            $this->installOptions(localAgentNotes: true),
-        );
-
-        $this->assertContains('AGENTS.local.example.md', $plan->paths());
-        $this->assertContains('AGENTS.local.md', $plan->paths());
-        $this->assertTrue($this->writeOperationFor($plan, 'AGENTS.local.md')->createsIfMissing());
-        $agentsSection = (new InstallPlanner)->agentsSection($this->installOptions(localAgentNotes: true));
-
-        $this->assertStringContainsString('Also read `AGENTS.local.md` when it exists', $agentsSection);
-        $this->assertStringContainsString('do not commit it', $agentsSection);
-        $this->assertStringContainsString('Local Agent Notes', $this->contentFor($plan, 'AGENTS.local.md'));
-    }
-
-    public function test_agent_skills_are_optional(): void
-    {
-        $plan = (new InstallPlanner)->plan(
-            ProjectContext::fromPath($this->makeProjectRoot()),
-            $this->installOptions(agentSkills: true),
-        );
-
-        $paths = $plan->paths();
-
-        $this->assertContains('tools/agents-ready/lib/agents.sh', $paths);
-        $this->assertContains('.ai/skills/bootstrap-current-checkout/SKILL.md', $paths);
-        $this->assertContains('.ai/skills/worktree-lifecycle/SKILL.md', $paths);
-        $this->assertStringContainsString('agents link', $this->contentFor($plan, 'tools/agents-ready/local.sh'));
-        $this->assertStringContainsString('./local agents link', $this->contentFor($plan, 'tools/agents-ready/lib/worktrees.sh'));
-        $this->assertStringContainsString('"skill": [".agents/skills"]', $this->contentFor($plan, 'opencode.jsonc.example'));
-        $agentsSection = (new InstallPlanner)->agentsSection($this->installOptions(agentSkills: true));
-
-        $this->assertStringContainsString('tracked skill sources live in `.ai/skills`', $agentsSection);
-        $this->assertStringContainsString('Run `./local agents link`', $agentsSection);
-        $this->assertStringContainsString('not generated activation links', $agentsSection);
     }
 
     public function test_compose_stub_uses_per_worktree_app_services_and_routing_labels(): void
@@ -340,18 +289,14 @@ final class InstallPlannerTest extends UnitTestCase
         $this->assertStringContainsString('HORIZON_PREFIX: ${HORIZON_PREFIX}', $compose);
     }
 
-    public function test_opencode_example_keeps_boost_mcp_disabled_by_default(): void
+    public function test_opencode_example_is_not_part_of_core_install(): void
     {
         $plan = (new InstallPlanner)->plan(
             ProjectContext::fromPath($this->makeProjectRoot()),
             $this->installOptions(),
         );
-        $opencode = $this->contentFor($plan, 'opencode.jsonc.example');
 
-        $this->assertStringContainsString('"enabled": false', $opencode);
-        $this->assertStringContainsString('["./local", "mcp", "boost"]', $opencode);
-        $this->assertStringContainsString('"instructions": ["AGENTS.md"]', $opencode);
-        $this->assertStringNotContainsString('"skill": [".agents/skills"]', $opencode);
+        $this->assertNotContains('opencode.jsonc.example', $plan->paths());
     }
 
     public function test_local_wrapper_exposes_default_command_surface(): void
@@ -413,7 +358,7 @@ final class InstallPlannerTest extends UnitTestCase
 
     public function test_agent_guidance_excludes_optional_conventions_by_default(): void
     {
-        $agents = (new InstallPlanner)->agentsSection($this->installOptions());
+        $agents = (new AgentsGuidance)->section();
 
         $this->assertStringContainsString('Horizon prefixes apply only when Horizon is enabled.', $agents);
         $this->assertStringNotContainsString('.ai/skills', $agents);
@@ -432,9 +377,6 @@ final class InstallPlannerTest extends UnitTestCase
             (new InstallPlanner)->plan(
                 ProjectContext::fromPath($this->makeProjectRoot()),
                 $this->installOptions(
-                    decisionNotes: true,
-                    localAgentNotes: true,
-                    agentSkills: true,
                     traefikHome: '/home/example/shared-traefik',
                     servicesHome: '/home/example/shared-services',
                 ),
@@ -538,6 +480,7 @@ final class InstallPlannerTest extends UnitTestCase
 
         $this->assertContains('scripts/local-dev/local.sh', $paths);
         $this->assertContains('scripts/local-dev/lib/common.sh', $paths);
+        $this->assertContains('scripts/local-dev/skills/worktree-lifecycle/SKILL.md', $paths);
         $this->assertContains('infra/docker/frankenphp/Dockerfile', $paths);
         $this->assertContains('infra/docker/frankenphp/Caddyfile', $paths);
         $this->assertStringContainsString('scripts/local-dev/local.sh', $this->contentFor($plan, 'local'));
@@ -648,9 +591,6 @@ final class InstallPlannerTest extends UnitTestCase
     }
 
     private function installOptions(
-        bool $decisionNotes = false,
-        bool $localAgentNotes = false,
-        bool $agentSkills = false,
         string $toolsPath = 'tools/agents-ready',
         string $dockerPath = 'docker/agents-ready',
         ?string $traefikHome = null,
@@ -663,9 +603,6 @@ final class InstallPlannerTest extends UnitTestCase
     ): InstallOptions {
         return new InstallOptions(
             hostRoot: '/home/example/app',
-            decisionNotes: $decisionNotes,
-            localAgentNotes: $localAgentNotes,
-            agentSkills: $agentSkills,
             toolsPath: $toolsPath,
             dockerPath: $dockerPath,
             traefikHome: $traefikHome,

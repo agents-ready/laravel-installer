@@ -26,7 +26,7 @@ final class InstallCommandTest extends TestCase
             ->expectsOutputToContain('Updated AGENTS.md')
             ->expectsOutputToContain('Updated .gitignore')
             ->expectsOutputToContain('Review .env.testing.example before committing; it was generated from local env files and may contain secrets.')
-            ->expectsOutputToContain('Optional: rerun with --decision-notes')
+            ->expectsOutputToContain('Optional: run php artisan agents-ready:conventions')
             ->expectsOutputToContain('Inspect tracked changes with git diff, then run ./local up. Local state lives in ignored .agents-ready/.')
             ->assertExitCode(0);
 
@@ -34,6 +34,7 @@ final class InstallCommandTest extends TestCase
         $this->assertFileExists($this->projectPath('tools/agents-ready/local.sh'));
         $this->assertFileExists($this->projectPath('tools/agents-ready/lib/common.sh'));
         $this->assertFileExists($this->projectPath('tools/agents-ready/lib/worktrees.sh'));
+        $this->assertFileExists($this->projectPath('tools/agents-ready/skills/worktree-lifecycle/SKILL.md'));
         $this->assertFileExists($this->projectPath('docker/agents-ready/frankenphp/Dockerfile'));
         $this->assertFileExists($this->projectPath('docker/agents-ready/frankenphp/Caddyfile'));
         $this->assertFileDoesNotExist($this->projectPath('docker/agents-ready/php-fpm/Dockerfile'));
@@ -50,6 +51,7 @@ final class InstallCommandTest extends TestCase
         $this->assertFileDoesNotExist($this->projectPath('AGENTS.local.md'));
         $this->assertFileDoesNotExist($this->projectPath('.ai/skills/bootstrap-current-checkout/SKILL.md'));
         $this->assertFileDoesNotExist($this->projectPath('docs/decision-notes/README.md'));
+        $this->assertFileDoesNotExist($this->projectPath('opencode.jsonc.example'));
         $this->assertStringContainsString('/.agents-ready/', $this->projectFile('.gitignore'));
         $this->assertStringContainsString('/.env.testing', $this->projectFile('.gitignore'));
         $this->assertStringNotContainsString('/.env.testing.example', $this->projectFile('.gitignore'));
@@ -72,6 +74,8 @@ final class InstallCommandTest extends TestCase
         $this->assertArrayNotHasKey('appDatabase', $worktree);
         $this->assertArrayNotHasKey('valkeyPrefix', $worktree);
         $this->assertArrayNotHasKey('horizonPrefix', $worktree);
+        $this->assertSame('tools/agents-ready', $config['toolsPath']);
+        $this->assertSame('docker/agents-ready', $config['dockerPath']);
         $this->assertSame(dirname($this->root).'/shared-traefik', $config['traefikHome']);
         $this->assertSame(dirname($this->root).'/shared-services', $config['servicesHome']);
         $this->assertStringNotContainsString('horizon:', $this->projectFile('docker-compose.yml'));
@@ -185,18 +189,30 @@ final class InstallCommandTest extends TestCase
         $this->assertSame("CUSTOM_TEMPLATE=true\n", $this->projectFile('.env.testing.example'));
     }
 
-    public function test_install_command_can_write_optional_decision_notes(): void
+    public function test_conventions_command_can_write_optional_decision_notes(): void
     {
-        $this->artisan('agents-ready:install', $this->nonInteractiveOptions(['--decision-notes' => true]))
+        $this->artisan('agents-ready:install', $this->nonInteractiveOptions())
+            ->assertExitCode(0);
+
+        $this->artisan('agents-ready:conventions', [
+            '--no-interaction' => true,
+            '--decision-notes' => true,
+        ])
             ->expectsOutputToContain('Wrote docs/decision-notes/README.md')
             ->assertExitCode(0);
 
         $this->assertFileExists($this->projectPath('docs/decision-notes/README.md'));
     }
 
-    public function test_install_command_can_initialize_local_agent_notes(): void
+    public function test_conventions_command_can_initialize_local_agent_notes(): void
     {
-        $this->artisan('agents-ready:install', $this->nonInteractiveOptions(['--local-agent-notes' => true]))
+        $this->artisan('agents-ready:install', $this->nonInteractiveOptions())
+            ->assertExitCode(0);
+
+        $this->artisan('agents-ready:conventions', [
+            '--no-interaction' => true,
+            '--local-agent-notes' => true,
+        ])
             ->expectsOutputToContain('Wrote AGENTS.local.example.md')
             ->expectsOutputToContain('Initialized AGENTS.local.md')
             ->assertExitCode(0);
@@ -206,16 +222,52 @@ final class InstallCommandTest extends TestCase
         $this->assertStringContainsString('Local Agent Notes', $this->projectFile('AGENTS.local.md'));
     }
 
-    public function test_install_command_can_write_optional_agent_skills(): void
+    public function test_conventions_command_can_write_optional_agent_skills(): void
     {
-        $this->artisan('agents-ready:install', $this->nonInteractiveOptions(['--agent-skills' => true]))
+        $this->artisan('agents-ready:install', $this->nonInteractiveOptions())
+            ->assertExitCode(0);
+
+        $this->artisan('agents-ready:conventions', [
+            '--no-interaction' => true,
+            '--agent-skills' => true,
+        ])
             ->expectsOutputToContain('Wrote tools/agents-ready/lib/agents.sh')
             ->expectsOutputToContain('Wrote .ai/skills/bootstrap-current-checkout/SKILL.md')
+            ->expectsOutputToContain('Run ./local agents link')
             ->assertExitCode(0);
 
         $this->assertFileExists($this->projectPath('tools/agents-ready/lib/agents.sh'));
         $this->assertFileExists($this->projectPath('.ai/skills/bootstrap-current-checkout/SKILL.md'));
         $this->assertStringContainsString('/.agents/skills/', $this->projectFile('.gitignore'));
+        $this->assertStringContainsString('agents link', $this->projectFile('tools/agents-ready/lib/agents.sh'));
+    }
+
+    public function test_interactive_conventions_command_prompts_for_conventions(): void
+    {
+        $this->artisan('agents-ready:install', $this->nonInteractiveOptions())
+            ->assertExitCode(0);
+
+        $this->artisan('agents-ready:conventions')
+            ->expectsConfirmation('Add decision-notes guidance?', 'yes')
+            ->expectsConfirmation('Add local agent notes convention?', 'yes')
+            ->expectsConfirmation('Add agent skills convention?', 'no')
+            ->expectsOutputToContain('Wrote docs/decision-notes/README.md')
+            ->expectsOutputToContain('Wrote AGENTS.local.example.md')
+            ->assertExitCode(0);
+
+        $this->assertFileExists($this->projectPath('docs/decision-notes/README.md'));
+        $this->assertFileExists($this->projectPath('AGENTS.local.md'));
+        $this->assertFileDoesNotExist($this->projectPath('.ai/skills/bootstrap-current-checkout/SKILL.md'));
+    }
+
+    public function test_agent_skills_convention_requires_core_generated_tools(): void
+    {
+        $this->artisan('agents-ready:conventions', [
+            '--no-interaction' => true,
+            '--agent-skills' => true,
+        ])
+            ->expectsOutputToContain('Agent skills convention requires generated wrapper hooks. Run agents-ready:install first')
+            ->assertExitCode(1);
     }
 
     public function test_install_command_persists_host_root_option_in_local_state(): void
@@ -270,6 +322,8 @@ final class InstallCommandTest extends TestCase
 
         $this->assertSame([
             'version' => 1,
+            'toolsPath' => 'tools/agents-ready',
+            'dockerPath' => 'docker/agents-ready',
             'traefikHome' => $traefikHome,
             'servicesHome' => dirname($this->root).'/shared-services',
         ], $config);
@@ -382,9 +436,6 @@ final class InstallCommandTest extends TestCase
             ->expectsQuestion('Project slug', 'project')
             ->expectsChoice('Runtime', 'nginx-php-fpm', ['frankenphp', 'nginx-php-fpm'])
             ->expectsChoice('Database', 'mysql', ['pgsql', 'mysql'])
-            ->expectsConfirmation('Add local agent notes convention?', 'yes')
-            ->expectsConfirmation('Add agent skills convention?', 'no')
-            ->expectsConfirmation('Add decision-notes guidance?', 'no')
             ->assertExitCode(0);
 
         $worktree = $this->projectJson('.agents-ready/worktree.json');
@@ -398,7 +449,7 @@ final class InstallCommandTest extends TestCase
         $this->assertSame('project.localhost', $worktree['routeDomain']);
         $this->assertSame($this->root.'-shared-traefik', $config['traefikHome']);
         $this->assertSame(dirname($this->root).'/shared-services', $config['servicesHome']);
-        $this->assertFileExists($this->projectPath('AGENTS.local.md'));
+        $this->assertFileDoesNotExist($this->projectPath('AGENTS.local.md'));
         $this->assertFileExists($this->projectPath('tools/agents-ready/local.sh'));
         $this->assertFileExists($this->projectPath('docker/agents-ready/php-fpm/Dockerfile'));
     }
@@ -418,9 +469,6 @@ final class InstallCommandTest extends TestCase
             '--runtime' => 'frankenphp',
             '--database' => 'pgsql',
         ])
-            ->expectsConfirmation('Add local agent notes convention?', 'no')
-            ->expectsConfirmation('Add agent skills convention?', 'no')
-            ->expectsConfirmation('Add decision-notes guidance?', 'no')
             ->assertExitCode(0);
 
         $worktree = $this->projectJson('.agents-ready/worktree.json');
@@ -450,7 +498,6 @@ final class InstallCommandTest extends TestCase
             ->expectsQuestion('Project slug', 'command-test-app')
             ->expectsChoice('Runtime', 'frankenphp', ['frankenphp', 'nginx-php-fpm'])
             ->expectsChoice('Database', 'pgsql', ['pgsql', 'mysql'])
-            ->doesntExpectOutputToContain('Optional: rerun with --decision-notes')
             ->assertExitCode(0);
 
         $this->assertSame("# Existing local notes\n", $this->projectFile('AGENTS.local.md'));
@@ -473,6 +520,16 @@ final class InstallCommandTest extends TestCase
         $this->assertFileExists($this->projectPath('infra/docker/frankenphp/Dockerfile'));
         $this->assertStringContainsString('scripts/dev/local.sh', $this->projectFile('local'));
         $this->assertStringContainsString('context: ./infra/docker/frankenphp', $this->projectFile('docker-compose.yml'));
+
+        $this->artisan('agents-ready:conventions', [
+            '--no-interaction' => true,
+            '--agent-skills' => true,
+        ])
+            ->expectsOutputToContain('Wrote scripts/dev/lib/agents.sh')
+            ->assertExitCode(0);
+
+        $this->assertFileExists($this->projectPath('scripts/dev/lib/agents.sh'));
+        $this->assertStringContainsString('agents link', $this->projectFile('scripts/dev/lib/agents.sh'));
     }
 
     public function test_install_command_rejects_unsafe_generated_paths(): void
@@ -767,11 +824,21 @@ final class InstallCommandTest extends TestCase
     {
         file_put_contents($this->projectPath('AGENTS.md'), "# Existing Agent Notes\n\n- Keep this project-specific guidance.\n");
 
-        $this->artisan('agents-ready:install', $this->nonInteractiveOptions(['--agent-skills' => true]))
+        $this->artisan('agents-ready:install', $this->nonInteractiveOptions())
             ->expectsOutputToContain('Updated AGENTS.md')
             ->assertExitCode(0);
 
-        $this->artisan('agents-ready:install', $this->nonInteractiveOptions(['--agent-skills' => true]))
+        $this->artisan('agents-ready:conventions', [
+            '--no-interaction' => true,
+            '--agent-skills' => true,
+        ])
+            ->expectsOutputToContain('Updated AGENTS.md')
+            ->assertExitCode(0);
+
+        $this->artisan('agents-ready:conventions', [
+            '--no-interaction' => true,
+            '--agent-skills' => true,
+        ])
             ->doesntExpectOutputToContain('Updated AGENTS.md')
             ->assertExitCode(0);
 
@@ -798,7 +865,14 @@ final class InstallCommandTest extends TestCase
             '',
         ]));
 
-        $this->artisan('agents-ready:install', $this->nonInteractiveOptions(['--local-agent-notes' => true]))
+        $this->artisan('agents-ready:install', $this->nonInteractiveOptions())
+            ->expectsOutputToContain('Updated AGENTS.md')
+            ->assertExitCode(0);
+
+        $this->artisan('agents-ready:conventions', [
+            '--no-interaction' => true,
+            '--local-agent-notes' => true,
+        ])
             ->expectsOutputToContain('Updated AGENTS.md')
             ->assertExitCode(0);
 
